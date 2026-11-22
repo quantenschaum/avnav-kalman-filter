@@ -4,6 +4,7 @@ from datetime import datetime
 from enum import IntEnum
 from math import isfinite, nan
 from time import monotonic, sleep
+from typing import NamedTuple
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -105,11 +106,16 @@ C_S = ["COG", "SOG"]
 H_W = ["HDT", "STW"]
 
 
+class Entry(NamedTuple):
+    value: float
+    timestamp: float
+
+
 class Plugin:
     @classmethod
     def pluginInfo(cls):
         return {
-            "description": "simple NMEA based simulator",
+            "description": "Kalman filter based dead reckoning",
             "version": __version__,
             "config": CONFIG,
             "data": [
@@ -117,18 +123,18 @@ class Plugin:
                     "path": PATH_PREFIX + "*",
                     "description": "kalman filter data",
                 },
-                {
-                    "path": "gps.lon",
-                },
-                {
-                    "path": "gps.lat",
-                },
-                {
-                    "path": "gps.track",
-                },
-                {
-                    "path": "gps.speed",
-                },
+                # {
+                #     "path": "gps.lon",
+                # },
+                # {
+                #     "path": "gps.lat",
+                # },
+                # {
+                #     "path": "gps.track",
+                # },
+                # {
+                #     "path": "gps.speed",
+                # },
             ],
         }
 
@@ -136,8 +142,18 @@ class Plugin:
         self.api = api
         self.api.registerEditableParameters(CONFIG, self.changeParam)
         self.api.registerRestart(self.stop)
-        self.api.registerSettingsFile("test file", "foo.json")
+        self.api.registerRequestHandler(self.handleApiRequest)
         self.saveAllConfig()
+        print(self.api.getBaseUrl())
+
+    def handleApiRequest(self, url, handler, args):
+        log(url, args)
+        if url == "input":
+            self.input = {
+                k.upper(): Entry(float(v[0]), monotonic()) for k, v in args.items()
+            }
+            log(self.input)
+            return {"status": "ok"}
 
     def stop(self):
         pass
@@ -195,14 +211,14 @@ class Plugin:
         lat_abs = abs(lat)
         lat_deg = int(lat_abs)
         lat_min = (lat_abs - lat_deg) * 60
-        lati = f"{lat_deg:02d}{lat_min:05.2f}"
+        lati = f"{lat_deg:02d}{lat_min:07.4f}"
         lat_hemi = "N" if lat >= 0 else "S"
         lon_abs = abs(lon)
         lon_deg = int(lon_abs)
         lon_min = (lon_abs - lon_deg) * 60
-        longi = f"{lon_deg:03d}{lon_min:05.2f}"
+        longi = f"{lon_deg:03d}{lon_min:07.4f}"
         lon_hemi = "E" if lon >= 0 else "W"
-        return f"${self.config[TALKER_ID]}RMC,{hhmmss},A,{lati},{lat_hemi},{longi},{lon_hemi},{sog:.1f},{cog:.1f},{ddmmyy},,,E"
+        return f"${self.config[TALKER_ID]}RMC,{hhmmss},A,{lati},{lat_hemi},{longi},{lon_hemi},{sog:.2f},{cog:.1f},{ddmmyy},,,E"
 
     def run(self):
         while not self.api.shouldStopMainThread():
@@ -229,6 +245,8 @@ class Plugin:
         t0, values0 = monotonic(), {}  # last values
         # scale and offset for cartesian tanget plane coordinates, boat starts at [0,0] meters
         b0, x0, y0, scale = 0, 0, 0, 1
+
+        self.input = {}
 
         def toGrid(lon, lat):
             "lon/lat --> cartesian meters"
@@ -265,7 +283,7 @@ class Plugin:
                 if v0 and v0.timestamp >= v1.timestamp:
                     continue  # must be a new value with different timestamp
                 age = t1 - v1.timestamp
-                if 0 <= age < 5:  # must be recent
+                if 0 <= age < 1.5 * self.config[INTERVAL]:  # must be recent
                     values1[k] = v1
                     # log(k, v1.value, v1.source, age)
 
@@ -275,12 +293,15 @@ class Plugin:
                 Mode.OFF
                 if not boat.t
                 else Mode.GPS
-                if all(k in input for k in POS)
+                if input and all(k in input for k in POS)
                 else Mode.DR
-                if all(k in input for k in H_W) and boat.n > 4
+                if input and all(k in input for k in H_W) and boat.n > 4
                 else Mode.MAN
             )
             log(mode, boat.n, input)
+
+            if self.input:  # inject values received via api
+                values1.update(self.input)
 
             if mode > Mode.OFF:
                 dt = t1 - b0 - boat.t
@@ -290,6 +311,7 @@ class Plugin:
             updated = []
             if all(k in values1 for k in POS):
                 lon, lat = [values1[k].value for k in POS]
+                self.fix = None
                 s = 1 / kalman.scale_factor(lat)
                 if abs(scale - s) > 1e-3:
                     scale = s  # update scale and offset
@@ -297,22 +319,36 @@ class Plugin:
                     b0 = t1
                     boat.x[:2] = 0, 0
                     boat.predict(1)  # initialize (also avoids singluar matrix)
-                    mode = Mode.GPS
+                    # mode = Mode.GPS
                     log("[red]scale", scale, "offset", x0, y0)
                 x, y = toGrid(lon, lat)
                 boat.measure_position(x, y)
                 updated.append("POS")
 
-            if mode > Mode.OFF and boat.n > 4 and all(k in values1 for k in H_W):
-                hdt, stw = [values1[k].value for k in H_W]
-                boat.measure_velocity(hdt, stw)
-                updated.append("C/S")
+            if mode > Mode.OFF:
+                if boat.n > 4 and all(k in values1 for k in H_W):
+                    hdt, stw = [values1[k].value for k in H_W]
+                    boat.measure_velocity(hdt, stw)
+                    updated.append("H/W")
 
-            # if all(k in values1 for k in H_W):
-            # cog, sog = [values1[k].value for k in H_W]
-            # log(lon, lat)
-            # log(x, y)
-            # boat.measure_position(x, y)
+                if boat.n == 4 and all(k in values1 for k in C_S):
+                    cog, sog = [values1[k].value for k in C_S]
+                    boat.measure_velocity(cog, sog, reset=True)
+                    updated.append("C/S")
+
+                BRG = ["BLON", "BLAT", "BRG"]
+                if all(k in values1 for k in BRG):
+                    lon, lat, brg = [values1[k].value for k in BRG]
+                    x, y = toGrid(lon, lat)
+                    boat.measure_bearing(x, y, brg)
+                    updated.append("BRG")
+
+                RNG = ["BLON", "BLAT", "RNG"]
+                if all(k in values1 for k in RNG):
+                    lon, lat, rng = [values1[k].value for k in RNG]
+                    x, y = toGrid(lon, lat)
+                    boat.measure_range(x, y, rng)
+                    updated.append("RNG")
 
             if updated:
                 log(f"[red]updated {','.join(updated)}")
@@ -336,15 +372,15 @@ class Plugin:
                         "SOG": boat.sog,
                     }
                 )
-            if boat.n > 4:
-                data.update(
-                    {
-                        "CTW": boat.ctw,
-                        "STW": boat.stw,
-                        "SET": boat.set,
-                        "DFT": boat.dft,
-                    }
-                )
+                if boat.n > 4:
+                    data.update(
+                        {
+                            "CTW": boat.ctw,
+                            "STW": boat.stw,
+                            "SET": boat.set,
+                            "DFT": boat.dft,
+                        }
+                    )
             for k, v in data.items():
                 if k[0] == k[0].upper():
                     v = float(v)
@@ -376,10 +412,13 @@ class Plugin:
                 )
 
             log()
-            values0.update(values1)
+            if self.input:
+                self.input = None
+            else:
+                values0.update(values1)
             self.api.setStatus(
                 "NMEA",
-                f"running model:{boat.n} mode:{mode} input:{input} updated:{updated} {rmc}",
+                f"model:{boat.n} mode:{mode} input:{input} updated:{updated} {rmc}",
             )
             t0 = t1
             sleep(self.config[INTERVAL] - (monotonic() - t1))
