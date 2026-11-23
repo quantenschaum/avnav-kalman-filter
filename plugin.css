@@ -1,0 +1,16 @@
+.button {
+  .icon {
+    &.KF-OFF {
+      background-image: url(icons/off.svg);
+    }
+    &.KF-GPS {
+      background-image: url(icons/gps.svg);
+    }
+    &.KF-DR {
+      background-image: url(icons/dr.svg);
+    }
+    &.KF-MAN {
+      background-image: url(icons/man.svg);
+    }
+  }
+}

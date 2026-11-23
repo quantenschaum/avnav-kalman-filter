@@ -24,7 +24,7 @@ __version__ = "dev"
 SOURCE = "kalman"
 PATH_PREFIX = f"gps.{SOURCE}."
 INTERVAL = "interval"
-CURRENT = "current"
+USE_LOG = "use_log"
 NOISE_V = "noise_v"
 NOISE_W = "noise_w"
 TALKER_ID = "talker_id"
@@ -38,8 +38,8 @@ CONFIG = [
         "rangeOrList": [0.1, 20.0],
     },
     {
-        "name": CURRENT,
-        "description": "estimate current, use 6D state vector",
+        "name": USE_LOG,
+        "description": "use log and compass, estimate current, use 6D state vector",
         "type": "BOOLEAN",
         "default": True,
     },
@@ -56,7 +56,7 @@ CONFIG = [
         "type": "NUMBER",
         "default": 5,
         "rangeOrList": [1, 5000],
-        "condition": {CURRENT: True},
+        "condition": {USE_LOG: True},
     },
     {
         "name": TALKER_ID,
@@ -71,12 +71,6 @@ CONFIG = [
         "default": 20,
         "rangeOrList": [0, 100],
     },
-    # {
-    #     "name": "allowKeyOverwrite",
-    #     "description": "Allow this plugin to replace existing AvNav data keys",
-    #     "type": "BOOLEAN",
-    #     "default": False,
-    # },
 ]
 
 INPUT_FIELDS = {
@@ -94,8 +88,7 @@ INPUT_FIELDS = {
 class Mode(IntEnum):
     OFF = 0  # not initialized
     GPS = 1  # locked to GPS
-    DR = 2  # dead reckoning, integrating course/speed
-    MAN = 3  # dead reckoning, manual input
+    DR = 2  # dead reckoning
 
     def __str__(self) -> str:
         return self.name
@@ -123,18 +116,6 @@ class Plugin:
                     "path": PATH_PREFIX + "*",
                     "description": "kalman filter data",
                 },
-                # {
-                #     "path": "gps.lon",
-                # },
-                # {
-                #     "path": "gps.lat",
-                # },
-                # {
-                #     "path": "gps.track",
-                # },
-                # {
-                #     "path": "gps.speed",
-                # },
             ],
         }
 
@@ -154,6 +135,19 @@ class Plugin:
             }
             log(self.input)
             return {"status": "ok"}
+        if url == "mode":
+            if "gps" in args:
+                self.use_gps = args["gps"][0] in ["1", "yes", "on", "true"]
+            if "log" in args:
+                self.use_log = args["log"][0] in ["1", "yes", "on", "true"]
+            if "reset" in args:
+                self.reset = args["reset"][0] in ["1", "yes", "on", "true"]
+            return {
+                "gps": self.use_gps,
+                "log": self.use_log,
+                "mode": self.mode,
+                "model": self.boat.n,
+            }
 
     def stop(self):
         pass
@@ -211,14 +205,14 @@ class Plugin:
         lat_abs = abs(lat)
         lat_deg = int(lat_abs)
         lat_min = (lat_abs - lat_deg) * 60
-        lati = f"{lat_deg:02d}{lat_min:07.4f}"
+        lati = f"{lat_deg:02d}{lat_min:08.5f}"
         lat_hemi = "N" if lat >= 0 else "S"
         lon_abs = abs(lon)
         lon_deg = int(lon_abs)
         lon_min = (lon_abs - lon_deg) * 60
-        longi = f"{lon_deg:03d}{lon_min:07.4f}"
+        longi = f"{lon_deg:03d}{lon_min:08.5f}"
         lon_hemi = "E" if lon >= 0 else "W"
-        return f"${self.config[TALKER_ID]}RMC,{hhmmss},A,{lati},{lat_hemi},{longi},{lon_hemi},{sog:.2f},{cog:.1f},{ddmmyy},,,E"
+        return f"${self.config[TALKER_ID]}RMC,{hhmmss},A,{lati},{lat_hemi},{longi},{lon_hemi},{sog:.3f},{cog:.2f},{ddmmyy},,,E"
 
     def run(self):
         while not self.api.shouldStopMainThread():
@@ -240,13 +234,16 @@ class Plugin:
         KN = kalman.kn
 
         qv = self.config[NOISE_V] / 1000
-        qw = self.config[NOISE_W] / 1000 if self.config[CURRENT] else 0
-        boat = kalman.Boat(qv, qw)  # the actual kalman filter
+        qw = self.config[NOISE_W] / 1000 if self.config[USE_LOG] else 0
+        self.boat = boat = kalman.Boat(qv, qw)  # the actual kalman filter
         t0, values0 = monotonic(), {}  # last values
         # scale and offset for cartesian tanget plane coordinates, boat starts at [0,0] meters
         b0, x0, y0, scale = 0, 0, 0, 1
 
         self.input = {}
+        self.use_gps = True
+        self.use_log = True
+        self.reset = False
 
         def toGrid(lon, lat):
             "lon/lat --> cartesian meters"
@@ -257,22 +254,10 @@ class Plugin:
             "cartesian meters --> lon/lat"
             return kalman.to_lonlat(scale * x + x0, scale * y + y0)
 
-        seq = 0
         while not self.api.shouldStopMainThread():
-            if self.config_changed:
+            if self.config_changed or self.reset:
                 break
             t1 = monotonic()
-            # seq, records = self.api.fetchFromQueue(
-            #     seq, number=1, waitTime=0.5, filter="$RMC", includeSource=True
-            # )
-            # for record in records:
-            #     log(record.data.strip())
-            #     log(record.timestamp, monotonic() - record.timestamp)
-            #     log(record.omitDecode)
-            #     log(record.source)
-            #     log(record.subsource)
-            #     log(record.sourcePriority)
-            #     log()
 
             values1 = {}  # new input values
             for k, p in INPUT_FIELDS.items():
@@ -283,30 +268,38 @@ class Plugin:
                 if v0 and v0.timestamp >= v1.timestamp:
                     continue  # must be a new value with different timestamp
                 age = t1 - v1.timestamp
-                if 0 <= age < 1.5 * self.config[INTERVAL]:  # must be recent
+                if 0 <= age < 2 * self.config[INTERVAL]:  # must be recent
                     values1[k] = v1
                     # log(k, v1.value, v1.source, age)
 
+            if not self.use_gps:
+                for k in POS + C_S:
+                    values0.pop(k, None)
+                    values1.pop(k, None)
+            if not self.use_log:
+                for k in H_W:
+                    values0.pop(k, None)
+                    values1.pop(k, None)
+
             # avaliable input data = data received within last n seconds
             input = [k for k, v in values0.items() if t1 - v.timestamp < 15]
-            mode = (  # mode based on avaliable input data
+            self.mode = mode = (  # mode based on avaliable input data
                 Mode.OFF
                 if not boat.t
                 else Mode.GPS
                 if input and all(k in input for k in POS)
                 else Mode.DR
-                if input and all(k in input for k in H_W) and boat.n > 4
-                else Mode.MAN
             )
             log(mode, boat.n, input)
 
             if self.input:  # inject values received via api
-                values1.update(self.input)
+                # values1 = self.input # replace
+                values1.update(self.input)  # merge
 
             if mode > Mode.OFF:
-                dt = t1 - b0 - boat.t
+                dt = max(0, t1 - b0 - boat.t)
                 boat.predict(dt)
-                log("[magenta]predict dt", dt, "t", boat.t)
+                log("[green]predict dt", dt, "t", boat.t)
 
             updated = []
             if all(k in values1 for k in POS):
@@ -317,6 +310,7 @@ class Plugin:
                     scale = s  # update scale and offset
                     x0, y0 = kalman.to_webmercator(lon, lat)
                     b0 = t1
+                    boat.t = 0
                     boat.x[:2] = 0, 0
                     boat.predict(1)  # initialize (also avoids singluar matrix)
                     # mode = Mode.GPS
@@ -400,7 +394,7 @@ class Plugin:
             #     self.writeValue(sog, INPUT_FIELDS["SOG"])
 
             rmc = ""
-            if mode > Mode.GPS:
+            if mode > Mode.GPS and self.use_gps and self.use_log:
                 rmc = self.rmc(datetime.utcnow(), lon, lat, boat.cog, boat.sog * KN)
                 log(rmc)
                 self.api.addNMEA(
