@@ -293,8 +293,8 @@ class Plugin:
             log(mode, boat.n, input)
 
             if self.input:  # inject values received via api
-                # values1 = self.input # replace
-                values1.update(self.input)  # merge
+                values1 = self.input  # replace
+                # values1.update(self.input)  # merge
 
             if mode > Mode.OFF:
                 dt = max(0, t1 - b0 - boat.t)
