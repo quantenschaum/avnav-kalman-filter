@@ -1,7 +1,7 @@
 from numpy import (
     arctan,
+    arctan2,
     array,
-    atan2,
     cos,
     degrees,
     diag,
@@ -227,7 +227,7 @@ class Boat(Kalman):
 
     @property  # heading
     def ctw(self):
-        return to360(degrees(atan2(*self.vtw)))
+        return to360(degrees(arctan2(*self.vtw)))
 
     @property  # water speed
     def stw(self):
@@ -239,7 +239,7 @@ class Boat(Kalman):
 
     @property  # current direction (set)
     def set(self):
-        return to360(degrees(atan2(*self.vcr)))
+        return to360(degrees(arctan2(*self.vcr)))
 
     @property  # current speed (drift)
     def dft(self):
@@ -251,7 +251,7 @@ class Boat(Kalman):
 
     @property  # course over ground
     def cog(self):
-        return to360(degrees(atan2(*self.vog)))
+        return to360(degrees(arctan2(*self.vog)))
 
     @property  # speed over ground
     def sog(self):
@@ -317,7 +317,7 @@ class Boat(Kalman):
 
             def h(x):
                 vx, vy = x[2:4]
-                return array([atan2(vx, vy)])
+                return array([arctan2(vx, vy)])
 
             def H(x):
                 vx, vy = x[2:4]
@@ -360,7 +360,7 @@ class Boat(Kalman):
                 vx, vy = x[2:4]
                 v2 = vx**2 + vy**2
                 v = sqrt(v2)
-                return array([atan2(vx, vy), v])
+                return array([arctan2(vx, vy), v])
 
             def H(x):
                 vx, vy = x[2:4]
@@ -389,7 +389,7 @@ class Boat(Kalman):
 
         def h(s):
             dx, dy = x - s[0], y - s[1]
-            return array([atan2(dx, dy)])
+            return array([arctan2(dx, dy)])
 
         def H(s):
             dx, dy = x - s[0], y - s[1]
@@ -430,8 +430,8 @@ class Boat(Kalman):
 
         def h(s):
             x, y = s[:2]
-            a = atan2(ax - x, ay - y)
-            b = atan2(bx - x, by - y)
+            a = arctan2(ax - x, ay - y)
+            b = arctan2(bx - x, by - y)
             return array([topi(b - a)])
 
         def H(s):
