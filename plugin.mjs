@@ -9,7 +9,7 @@ export default async (api) => {
       ...a,
     );
   }
-  log("kalman", api);
+  log("start", api);
 
   const LatLon = api.LatLon();
 
@@ -29,7 +29,8 @@ export default async (api) => {
   const radians = (deg) => (deg * Math.PI) / 180;
   const degrees = (rad) => (rad * 180) / Math.PI;
   // const topi = (a) => a - 2 * Math.PI * Math.round(a / (2 * Math.PI)); // wrap angle to [-pi, pi]
-  // const to360 = (d) => (d + 360) % 360;
+  const to360 = (d) => (d + 360) % 360;
+  const to180 = (d) => to360(d + 180) - 180;
   // isNaN = (x) => x == null || Number.isNaN(x);
   // // unit conversion factors, internal units are meters and seconds
   const nm = 1 / 1852; // m -> nm
@@ -114,34 +115,45 @@ export default async (api) => {
       // log(map.getDimensions());
       // log(map.getScale());
       // log(map.getRotation());
-      // log(this);
       // log(api.getBaseUrl());
       // console.log(api.getStoreBaseKey());
       // console.log(api.getStoreData());
-      const [w, h] = map.getDimensions();
+      const s = map.getScale();
+      const r = map.getRotation();
+      const [w0, h0] = map.getDimensions();
+      const [w, h] = [w0 / s, h0 / s];
       center = LonLat(...map.pixelToLonLat(w / 2, h / 2));
 
       if (data.LON == null && data.LAT == null) return;
       boatpos = LonLat(data.LON, data.LAT);
       cogsog = { cog: data.COG, sog: data.SOG };
 
-      const [alon, alat] = map.pixelToLonLat(w / 2, 0);
-      const [blon, blat] = map.pixelToLonLat(w / 2, h);
-      const ppm = h / ((alat - blat) * 60 * 1852);
-      // log('ppm', ppm);
+      const [px0, py0] = map.lonLatToPixel(center.lon, center.lat - 0.5 / 60);
+      const [px1, py1] = map.lonLatToPixel(center.lon, center.lat + 0.5 / 60);
+      const ppm = Math.hypot(px1 - px0, py1 - py0) / 1852;
+      // log("ppm", ppm);
 
-      const [tx, ty] = map.lonLatToPixel(data.LON, data.LAT);
-
-      const ctx = map.getContext(); // canvas.getContext("2d");
+      const ctx = map.getContext();
       ctx.save();
-      ctx.translate(tx, ty);
+
+      if (devmode) {
+        let [cx, cy] = map.lonLatToPixel(center.lon, center.lat);
+        ctx.beginPath();
+        ctx.arc(cx, cy, s * 10, 0, radians(360));
+        ctx.fillStyle = "blue";
+        ctx.globalAlpha = 0.5;
+        ctx.fill();
+      }
+
+      if (r) center = boatpos = null; // lonLatToPixel broken if rotated
 
       for (const b of markers) {
         const [bx, by] = map.lonLatToPixel(b.lon, b.lat);
         // target marker
         ctx.beginPath();
-        ctx.arc(bx - tx, by - ty, 5, 0, radians(360));
+        ctx.arc(bx, by, s * 5, 0, radians(360));
         ctx.fillStyle = "black";
+        ctx.globalAlpha = 0.9;
         ctx.fill();
         if (b.brg != null) {
           // bearing ling
@@ -150,24 +162,27 @@ export default async (api) => {
           const ex = bx + d * Math.sin(brg);
           const ey = by - d * Math.cos(brg);
           ctx.beginPath();
-          ctx.moveTo(bx - tx, by - ty);
-          ctx.lineTo(ex - tx, ey - ty);
+          ctx.moveTo(bx, by);
+          ctx.lineTo(ex, ey);
           ctx.strokeStyle = "black";
-          ctx.lineWidth = 2;
+          ctx.lineWidth = s * 2;
           ctx.stroke();
         } else if (b.rng != null) {
           // range circle
           ctx.beginPath();
-          ctx.arc(bx - tx, by - ty, b.rng * ppm, 0, radians(360));
+          ctx.arc(bx, by, b.rng * ppm, 0, radians(360));
           ctx.strokeStyle = "black";
-          ctx.lineWidth = 2;
+          ctx.lineWidth = s * 2;
           ctx.stroke();
         }
       }
 
+      const [tx, ty] = map.lonLatToPixel(data.LON, data.LAT);
+      ctx.translate(tx, ty);
+
       // position marker
       ctx.beginPath();
-      ctx.arc(0, 0, 5, 0, radians(360));
+      ctx.arc(0, 0, s * 5, 0, radians(360));
       ctx.fillStyle = data.color;
       ctx.globalAlpha = 0.8;
       ctx.fill();
@@ -189,7 +204,7 @@ export default async (api) => {
         ctx.globalAlpha = 0.1;
         ctx.fill();
         ctx.strokeStyle = data.color;
-        ctx.lineWidth = 2;
+        ctx.lineWidth = s * 2;
         ctx.globalAlpha = 0.8;
         ctx.stroke();
       }
@@ -202,7 +217,7 @@ export default async (api) => {
           Math.sin(cog) * data.cvt * data.SOG * ppm,
           -Math.cos(cog) * data.cvt * data.SOG * ppm,
         );
-        ctx.lineWidth = 2;
+        ctx.lineWidth = s * 2;
         ctx.strokeStyle = data.color;
         ctx.globalAlpha = 0.8;
         ctx.stroke();
@@ -216,8 +231,8 @@ export default async (api) => {
           Math.sin(set) * data.cvt * data.DFT * ppm,
           -Math.cos(set) * data.cvt * data.DFT * ppm,
         );
-        ctx.setLineDash([2, 2]);
-        ctx.lineWidth = 2;
+        ctx.setLineDash([s * 2, s * 2]);
+        ctx.lineWidth = s * 2;
         ctx.strokeStyle = data.color;
         ctx.globalAlpha = 0.8;
         ctx.stroke();
@@ -265,7 +280,7 @@ export default async (api) => {
     const sog = Math.round((cogsog?.sog ?? NaN) * kn * 10) / 10;
     const values = { brg, rng, cog, sog };
     const parameters = [];
-    if (m.mode > 1) {
+    if (m.mode > 1 && center != null) {
       parameters.push(
         {
           name: "brg",
@@ -305,7 +320,10 @@ export default async (api) => {
     api.showDialog(
       {
         title: "Kalman-Filter",
-        // text: "Configure the filter.",
+        text:
+          center != null
+            ? ""
+            : "If buttons are missing, disable chart rotation.",
         parameters,
         values,
         buttons: [
