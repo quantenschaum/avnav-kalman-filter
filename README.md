@@ -1,75 +1,36 @@
 # Dead Reckoning Plugin for AvNav
 
-## How it works in principle
+The Kalman Filter plugin estimates the boat's position, course and speed. It uses an iterative extended Kalman filter (iEKF), combining motion data with GPS fixes and observations you enter on the chart. When recent GPS positions are available, it follows them; when they stop, it continues in dead-reckoning mode.
 
-- at core uses [kalman filter](https://en.wikipedia.org/wiki/Kalman_filter) to estimate position, course, speed
-  - an iterative extended kalman filter iEKF
-- 2 models
-  - manual entry
-    - work w/o any sensor, like DR plotting on paper, just live
-    - 4d state vector: pos,cog,sog
-    - enter fixes (like start position)
-    - enter course,speed changes
-    - enter bearings
-  - log/compass mode
-    - 6d state vector: pos, water speed, heading (course through water), current set and drift
-    - continuously reads paddlewheel log + electronic compass (continuously updated DR, follow course/speed changes)
-    - esitmates current when fixes or bearings are supplied manually
-      - those absolute observations pull the position "back on track"
-- both modes can run locked to gps and take over on failure (when on gps pos is available)
-- failure can be simulated to test and tune the filter
-- estimated position covariance ellpise is shown on chart
-- generates NMEA RMC sentence to inject estimated pos/cog/sog into avnav
+## Models
 
-## What's in the Box?
+Choose the model with **Use log and compass** in the plugin settings:
 
-- button on chart page to
-  - allow manual data entry
-  - enable/disbale simulated gps failure for testing/tuning
-- map overlay to show estimated position and covariance ellpise
-  - needs to added, other wise entry of bearings doesnt work
+- **Manual** (off): Uses position and ground velocity. You can enter a fix and update course and speed from the chart dialog; no log or compass is required.
+- **Log and compass** (on): Uses water speed from the log and heading from the compass, and estimates current as well as position. Chart fixes, bearings and ranges help correct the estimate. The compass needs to supply true heading.
 
-## installation
+Both models can use GPS input. The **GPS off** button simulates lost GPS for testing by withholding GPS position and ground course/speed from the filter. Log and compass input, if selected, continues to be used.
 
-- download the zip and upload it into avnav on plugin page
-- needs numpy
+## Install and configure
 
-## setup
+1. Upload the plugin ZIP from AvNav's **Plugins** page. NumPy must be installed in AvNav's Python environment.
+2. Configure the plugin in its settings. **Use log and compass** selects the model. **Noise v** controls how quickly uncertainty in motion and position grows; in log-and-compass mode, **Noise w** controls how quickly the estimated current can change. Higher values let the estimate adapt faster but make uncertainty grow faster too.
+3. Add the **KalmanFilter** map overlay: **Layout → Edit → On map → Add KalmanFilter**. The overlay shows the estimated position and its covariance ellipse, and is needed for chart-based fixes, bearings and ranges.
+4. Set the overlay's confidence level (percent) to control the ellipse shown. The overlay can also show the course/speed and current vectors.
 
-- configure in plugin settings
-- use_log selects model, with log/compass or fully manual
-- process noise describes how fast the uncertainty (ellipse) grows, adjust carefully
-  - v for position course speed
-  - w for current (set/drift) keep this lower to adjust current slowly
-    nmea output priotriy should be low to not override actual gps data
+Keep the NMEA output priority below that of your real GPS source so the estimate does not take precedence over GPS data. The plugin sends an RMC sentence when operating in dead-reckoning mode and GPS input has not been disabled manually.
 
-- add the map overlay: layout > edit > on map > add kalmanfilter
-- confidence level in perecent for the cov ellipse
+## Use
 
-## usage
+The plugin publishes its estimate under `gps.kalman.*`, which you can use in AvNav widgets.
 
-- use avnav as normal
-- the plugin published it s internal data in `gps.kalman.*` use them in widgets as usual
-- observe the overlay, the cov ellpise
-- if gps fails, the filter will take over
-- simulate this by clicking the KF button
+Click **KF** button on the chart to open the controls. In dead-reckoning mode, you can:
 
-- the dialog has these buttons
-  - reset = reset filter, start over
-  - cleanup = delete all bearings from chart
-  - gps off = simulate gps failure, stops feeding the filter with gps positions (will reveal following buttons)
-  - fix = tell filter we are at chart center (cross hair)
-  - rng = tell filter the range to chart center, enter value in rng field, circle will be drawn on chart
-  - brg = tell filter a bearing to chart center, enter value in brg field, bearing line will be draw on chart
+- **Fix**: use the chart center as the boat's observed position (when close to buoy or other know object).
+- **C/S** (manual model): enter course over ground (true) and speed over ground.
+- **BRG**: enter a true bearing to the object at the chart center.
+- **RNG**: enter the range to the object at the chart center (in nautical miles).
 
-### taking bearings
+Bearings and ranges are prefilled with the estimate from the boat to the chart center. To take a bearing, place the charted object at the center, press **KF**, enter the true bearing you measured, then press **BRG**. For a range, place the object at the center, enter the measured range and press **RNG**. The overlay draws each observation on the chart and the filter incorporates it into the estimate. Enter successive bearings to combine cross-bearings or running fixes.
 
-- take a bearing (wrt true north)
-- select object on chart, place under cross hair
-- press KF button
-- enter bearing, estimated bearing is prefilled
-- press brg
-- bearing will be drawn and position/cours/speed/covariance is adjusted accordingly
-
-- taking ranges (from radar) works the same
-- for cross bearings or running fixeds just take consecutive bearings, one after the other, the filter will merge them automatically
+**GPS off** simulates GPS loss. **Reset** restarts the filter; **Cleanup** clears the observation markers from the overlay (it does not undo observations already incorporated by the filter).
