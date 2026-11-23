@@ -108,7 +108,7 @@ export default async (api) => {
     finalizeFunction: function () {},
     renderCanvas: function (canvas, data, map) {
       // log(canvas);
-      log(data);
+      // log(data);
       // log(map);
       // log(map.pixelToLonLat(0, 0));
       // log(map.getDimensions());
@@ -125,10 +125,12 @@ export default async (api) => {
       boatpos = LonLat(data.LON, data.LAT);
       cogsog = { cog: data.COG, sog: data.SOG };
 
+      const [alon, alat] = map.pixelToLonLat(w / 2, 0);
+      const [blon, blat] = map.pixelToLonLat(w / 2, h);
+      const ppm = h / ((alat - blat) * 60 * 1852);
+      // log('ppm', ppm);
+
       const [tx, ty] = map.lonLatToPixel(data.LON, data.LAT);
-      const [sx, sy] = map.lonLatToPixel(data.LON, data.LAT + 1 / 600);
-      const ppm = (ty - sy) / 185.2; // px per meter
-      // console.log("ppm", ppm);
 
       const ctx = map.getContext(); // canvas.getContext("2d");
       ctx.save();
@@ -263,7 +265,7 @@ export default async (api) => {
     const sog = Math.round((cogsog?.sog ?? NaN) * kn * 10) / 10;
     const values = { brg, rng, cog, sog };
     const parameters = [];
-    if (m.mode > 1 && center != null && boatpos != null) {
+    if (m.mode > 1) {
       parameters.push(
         {
           name: "brg",
@@ -321,6 +323,7 @@ export default async (api) => {
             name: "delete",
             icon: `${base}icons/delete.svg`,
             shortText: "cleanup",
+            visible: markers.length > 0,
             onClick: (event, values, close) => {
               markers.length = 0;
             },
@@ -338,7 +341,7 @@ export default async (api) => {
             name: "fix",
             icon: `${base}icons/gps.svg`,
             shortText: "FIX",
-            visible: (m.mode == 0 || m.mode > 1) && center != null,
+            visible: m.mode != 1 && center != null,
             onClick: (event, values, close) => {
               if (center != null) {
                 fetch(`${inputUrl}?LON=${center.lon}&LAT=${center.lat}`);
@@ -350,7 +353,7 @@ export default async (api) => {
             icon: `${base}icons/speed.svg`,
             shortText: "C/S",
             visible: m.mode > 1 && m.model == 4,
-            disabled: () => values.cog < 0 || values.sog < 0,
+            disabled: () => !(isFinite(values.cog) && isFinite(values.sog)),
             onClick: (event, values, close) => {
               fetch(`${inputUrl}?COG=${values.cog}&SOG=${values.sog / kn}`);
             },
@@ -359,8 +362,8 @@ export default async (api) => {
             name: "rng",
             icon: `${base}icons/range.svg`,
             shortText: "RNG",
-            visible: m.mode > 1 && center != null && boatpos != null,
-            disabled: () => values.brg < 0,
+            visible: center != null,
+            disabled: () => !isFinite(values.rng),
             onClick: (event, values, close) => {
               markers.push({
                 lon: center.lon,
@@ -370,43 +373,43 @@ export default async (api) => {
               if (markers.length > 20) {
                 markers.splice(0, markers.length - 20);
               }
-              fetch(
-                `${inputUrl}?BLON=${center.lon}&BLAT=${center.lat}&RNG=${values.rng / nm}`,
-              );
+              if (m.mode > 1) {
+                fetch(
+                  `${inputUrl}?BLON=${center.lon}&BLAT=${center.lat}&RNG=${values.rng / nm}`,
+                );
+              }
             },
           },
           {
             name: "brg",
             icon: `${base}icons/compass.svg`,
             shortText: "BRG",
-            visible: m.mode > 1 && center != null && boatpos != null,
-            disabled: () => values.brg < 0,
+            visible: center != null,
+            disabled: () => !isFinite(values.brg),
             onClick: (event, values, close) => {
               markers.push({
                 lon: center.lon,
                 lat: center.lat,
                 brg: values.brg,
-                rng: 2 * boatpos.distanceTo(center),
+                rng: 2 * (boatpos?.distanceTo(center) ?? 5000),
               });
               if (markers.length > 20) {
                 markers.splice(0, markers.length - 20);
               }
-              fetch(
-                `${inputUrl}?BLON=${center.lon}&BLAT=${center.lat}&BRG=${values.brg}`,
-              );
+              if (m.mode > 1) {
+                fetch(
+                  `${inputUrl}?BLON=${center.lon}&BLAT=${center.lat}&BRG=${values.brg}`,
+                );
+              }
             },
           },
         ],
-        onChange: (event, changed) => {
-          log(event, changed);
-          Object.assign(values, changed);
-        },
+        onChange: (event, changed) => Object.assign(values, changed),
       },
       e,
     );
   }
 
-  log("button...");
   api.registerUserButton(
     {
       name: "button",
@@ -432,5 +435,4 @@ export default async (api) => {
     },
     "navpage",
   );
-  log("button registered");
 };
