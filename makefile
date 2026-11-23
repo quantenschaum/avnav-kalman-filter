@@ -9,7 +9,8 @@ kalman-filter.zip: kalman-filter
 
 kalman-filter: pyproject.toml
 	mkdir -p $@
-	cp * $@ || true
+	cp -rv * $@ || true
+	rm -rf $@/__*
 	sed -i 's/^__version__.*/__version__ = $(shell grep version $< | cut -d' ' -f3)/' $@/plugin.py
 
 clean:
