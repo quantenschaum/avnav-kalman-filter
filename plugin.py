@@ -29,6 +29,12 @@ NOISE_V = "noise_v"
 NOISE_W = "noise_w"
 TALKER_ID = "talker_id"
 PRIORITY = "priority"
+SPEEDUP = "speedup"
+SPD_ERROR = "spd_error"
+CRS_ERROR = "crs_error"
+POS_ERROR = "pos_error"
+BRG_ERROR = "brg_error"
+RNG_ERROR = "rng_error"
 CONFIG = [
     {
         "name": INTERVAL,
@@ -59,6 +65,41 @@ CONFIG = [
         "condition": {USE_LOG: True},
     },
     {
+        "name": POS_ERROR,
+        "description": "position measurement error (±m)",
+        "type": "FLOAT",
+        "default": 5,
+        "rangeOrList": [0.5, 500],
+    },
+    {
+        "name": SPD_ERROR,
+        "description": "speed measurement error (±kn)",
+        "type": "FLOAT",
+        "default": 0.1,
+        "rangeOrList": [0.01, 10],
+    },
+    {
+        "name": CRS_ERROR,
+        "description": "course measurement error (±°)",
+        "type": "FLOAT",
+        "default": 2,
+        "rangeOrList": [0.1, 20],
+    },
+    {
+        "name": BRG_ERROR,
+        "description": "bearing measurement error (±°)",
+        "type": "FLOAT",
+        "default": 2,
+        "rangeOrList": [0.1, 20],
+    },
+    {
+        "name": RNG_ERROR,
+        "description": "range measurement error (±m)",
+        "type": "FLOAT",
+        "default": 5,
+        "rangeOrList": [0.5, 500],
+    },
+    {
         "name": TALKER_ID,
         "description": "NMEA talker id for sent sentences",
         "type": "STRING",
@@ -70,6 +111,13 @@ CONFIG = [
         "type": "NUMBER",
         "default": 20,
         "rangeOrList": [0, 100],
+    },
+    {
+        "name": SPEEDUP,
+        "description": "time speedup factor (for simulation and testing)",
+        "type": "FLOAT",
+        "default": 1,
+        "rangeOrList": [1, 100],
     },
 ]
 
@@ -122,7 +170,7 @@ class Plugin:
     def __init__(self, api: AVNApi):
         self.api = api
         self.api.registerEditableParameters(CONFIG, self.changeParam)
-        self.api.registerRestart(self.stop)
+        # self.api.registerRestart(self.stop)
         self.api.registerRequestHandler(self.handleApiRequest)
         self.saveAllConfig()
         print(self.api.getBaseUrl())
@@ -131,7 +179,7 @@ class Plugin:
         log(url, args)
         if url == "input":
             self.input = {
-                k.upper(): Entry(float(v[0]), monotonic()) for k, v in args.items()
+                k.upper(): Entry(float(v[0]), self.monotonic()) for k, v in args.items()
             }
             log(self.input)
             return {"status": "ok"}
@@ -150,7 +198,18 @@ class Plugin:
             }
 
     def stop(self):
-        pass
+        log("[red]STOP")
+
+    def monotonic(self):
+        return self.config[SPEEDUP] * monotonic()
+
+    def utcnow(self):
+        if self.config[SPEEDUP] > 1:
+            t1 = datetime.utcnow().timestamp()
+            t0 = self.start.timestamp()
+            t1 = t0 + (t1 - t0) * self.config[SPEEDUP]
+            return datetime.fromtimestamp(t1)
+        return datetime.utcnow()
 
     def getConfigValue(self, name):
         defaults = self.pluginInfo()["config"]
@@ -214,7 +273,12 @@ class Plugin:
         lon_hemi = "E" if lon >= 0 else "W"
         return f"${self.config[TALKER_ID]}RMC,{hhmmss},A,{lati},{lat_hemi},{longi},{lon_hemi},{sog:.3f},{cog:.2f},{ddmmyy},,,E"
 
+    def vdr(self, set, dft):
+        "set/drift NMEA sentence"
+        return f"${self.config[TALKER_ID]}VDR,{set:.2f},T,,,{dft:.3f},N"
+
     def run(self):
+        # outer loop for restarting main loop
         while not self.api.shouldStopMainThread():
             try:
                 self.loop()
@@ -236,7 +300,8 @@ class Plugin:
         qv = self.config[NOISE_V] / 1000
         qw = self.config[NOISE_W] / 1000 if self.config[USE_LOG] else 0
         self.boat = boat = kalman.Boat(qv, qw)  # the actual kalman filter
-        t0, values0 = monotonic(), {}  # last values
+        self.start = datetime.utcnow()
+        t0, values0 = self.monotonic(), {}  # last values
         # scale and offset for cartesian tanget plane coordinates, boat starts at [0,0] meters
         b0, x0, y0, scale = 0, 0, 0, 1
 
@@ -257,7 +322,7 @@ class Plugin:
         while not self.api.shouldStopMainThread():
             if self.config_changed or self.reset:
                 break
-            t1 = monotonic()
+            t1 = self.monotonic()
 
             values1 = {}  # new input values
             for k, p in INPUT_FIELDS.items():
@@ -267,7 +332,9 @@ class Plugin:
                     continue  # skip invalid
                 if v0 and v0.timestamp >= v1.timestamp:
                     continue  # must be a new value with different timestamp
-                age = t1 - v1.timestamp
+                age = (
+                    monotonic() - v1.timestamp
+                )  # plain monotonic here because timestamp is not sped up
                 if 0 <= age < 2 * self.config[INTERVAL]:  # must be recent
                     values1[k] = v1
                     # log(k, v1.value, v1.source, age)
@@ -282,7 +349,7 @@ class Plugin:
                     values1.pop(k, None)
 
             # avaliable input data = data received within last n seconds
-            input = [k for k, v in values0.items() if t1 - v.timestamp < 15]
+            input = [k for k, v in values0.items() if monotonic() - v.timestamp < 15]
             self.mode = mode = (  # mode based on avaliable input data
                 Mode.OFF
                 if not boat.t
@@ -316,32 +383,32 @@ class Plugin:
                     # mode = Mode.GPS
                     log("[red]scale", scale, "offset", x0, y0)
                 x, y = toGrid(lon, lat)
-                boat.measure_position(x, y)
+                boat.measure_position(x, y, self.config[POS_ERROR])
                 updated.append("POS")
 
             if mode > Mode.OFF:
+                cerr, serr = self.config[CRS_ERROR], self.config[SPD_ERROR]
                 if boat.n > 4 and all(k in values1 for k in H_W):
                     hdt, stw = [values1[k].value for k in H_W]
-                    boat.measure_velocity(hdt, stw)
+                    boat.measure_velocity(hdt, stw, cerr, serr)
                     updated.append("H/W")
-
                 if boat.n == 4 and all(k in values1 for k in C_S):
                     cog, sog = [values1[k].value for k in C_S]
-                    boat.measure_velocity(cog, sog, reset=True)
+                    boat.measure_velocity(cog, sog, cerr, serr, reset=True)
                     updated.append("C/S")
 
                 BRG = ["BLON", "BLAT", "BRG"]
                 if all(k in values1 for k in BRG):
                     lon, lat, brg = [values1[k].value for k in BRG]
                     x, y = toGrid(lon, lat)
-                    boat.measure_bearing(x, y, brg)
+                    boat.measure_bearing(x, y, brg, self.config[BRG_ERROR])
                     updated.append("BRG")
 
                 RNG = ["BLON", "BLAT", "RNG"]
                 if all(k in values1 for k in RNG):
                     lon, lat, rng = [values1[k].value for k in RNG]
                     x, y = toGrid(lon, lat)
-                    boat.measure_range(x, y, rng)
+                    boat.measure_range(x, y, rng, self.config[RNG_ERROR])
                     updated.append("RNG")
 
             if updated:
@@ -393,9 +460,9 @@ class Plugin:
             #     self.writeValue(cog, INPUT_FIELDS["COG"])
             #     self.writeValue(sog, INPUT_FIELDS["SOG"])
 
-            rmc = ""
+            nmea = []
             if mode > Mode.GPS and self.use_gps and self.use_log:
-                rmc = self.rmc(datetime.utcnow(), lon, lat, boat.cog, boat.sog * KN)
+                rmc = self.rmc(self.utcnow(), lon, lat, boat.cog, boat.sog * KN)
                 log(rmc)
                 self.api.addNMEA(
                     rmc,
@@ -404,15 +471,28 @@ class Plugin:
                     omitDecode=False,
                     sourcePriority=self.config[PRIORITY],
                 )
+                nmea.append("RMC")
+                if boat.n > 4:
+                    vdr = self.vdr(boat.set, boat.dft * KN)
+                    log(vdr)
+                    self.api.addNMEA(
+                        vdr,
+                        source=SOURCE,
+                        addCheckSum=True,
+                        omitDecode=False,
+                        sourcePriority=self.config[PRIORITY],
+                    )
+                    nmea.append("VDR")
 
             log()
             if self.input:
                 self.input = None
             else:
                 values0.update(values1)
+
             self.api.setStatus(
                 "NMEA",
-                f"model:{boat.n} mode:{mode} input:{input} updated:{updated} {rmc}",
+                f"model:{boat.n} mode:{mode} input:{input} updated:{updated} NMEA:{nmea}",
             )
             t0 = t1
-            sleep(self.config[INTERVAL] - (monotonic() - t1))
+            sleep(max(0, self.config[INTERVAL] - (self.monotonic() - t1)))

@@ -14,3 +14,10 @@
     }
   }
 }
+/*.ol-layer {
+  transform: scale(0.5);
+  outline: 2px solid red;
+  canvas {
+    outline: 2px solid blue;
+  }
+}*/

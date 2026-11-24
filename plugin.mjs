@@ -36,6 +36,12 @@ export default async (api) => {
   const nm = 1 / 1852; // m -> nm
   const kn = 3600 / 1852; // m/s -> kn
   // const kmh = 3600 / 1000; // m/s -> km/h
+  //
+  function round(v, n = 0) {
+    if (v == null) return NaN;
+    const f = n == 0 ? 1 : Math.pow(10, n);
+    return Math.round(v * f) / f;
+  }
 
   /** Cholesky decomposition: returns lower-triangular L with L Lᵀ = A */
   function cholesky(A) {
@@ -82,10 +88,12 @@ export default async (api) => {
   const modeUrl = base + "api/mode";
   const inputUrl = base + "api/input";
 
+  let hasOverlay = false;
+  let isRotated = false;
   let boatpos = null;
   let cogsog = null;
   let center = null;
-  const markers = [];
+  const measurements = [];
 
   const KalmanOverlay = {
     name: "KalmanFilter",
@@ -105,8 +113,12 @@ export default async (api) => {
       DFT: "nav.gps.kalman.DFT",
       cvt: "properties.navBoatCourseTime",
     },
-    initFunction: function (map, data) {},
-    finalizeFunction: function () {},
+    initFunction: function (map, data) {
+      hasOverlay = true;
+    },
+    finalizeFunction: function () {
+      hasOverlay = false;
+    },
     renderCanvas: function (canvas, data, map) {
       // log(canvas);
       // log(data);
@@ -120,6 +132,7 @@ export default async (api) => {
       // console.log(api.getStoreData());
       const s = map.getScale();
       const r = map.getRotation();
+      isRotated = r != 0;
       const [w0, h0] = map.getDimensions();
       const [w, h] = [w0 / s, h0 / s];
       center = LonLat(...map.pixelToLonLat(w / 2, h / 2));
@@ -145,20 +158,18 @@ export default async (api) => {
         ctx.fill();
       }
 
-      if (r) center = boatpos = null; // lonLatToPixel broken if rotated
-
-      for (const b of markers) {
-        const [bx, by] = map.lonLatToPixel(b.lon, b.lat);
+      for (const m of measurements) {
+        const [bx, by] = map.lonLatToPixel(m.lon, m.lat);
         // target marker
         ctx.beginPath();
         ctx.arc(bx, by, s * 5, 0, radians(360));
         ctx.fillStyle = "black";
         ctx.globalAlpha = 0.9;
         ctx.fill();
-        if (b.brg != null) {
+        if (m.brg != null) {
           // bearing ling
-          const brg = radians(b.brg + 180);
-          const d = b.rng * ppm;
+          const brg = radians(m.brg + 180);
+          const d = m.rng * ppm;
           const ex = bx + d * Math.sin(brg);
           const ey = by - d * Math.cos(brg);
           ctx.beginPath();
@@ -167,10 +178,12 @@ export default async (api) => {
           ctx.strokeStyle = "black";
           ctx.lineWidth = s * 2;
           ctx.stroke();
-        } else if (b.rng != null) {
+        } else if (m.rng != null) {
           // range circle
           ctx.beginPath();
-          ctx.arc(bx, by, b.rng * ppm, 0, radians(360));
+          const a = m.a ?? 0;
+          const b = m.b ?? 360;
+          ctx.arc(bx, by, m.rng * ppm, radians(a - 90), radians(b - 90));
           ctx.strokeStyle = "black";
           ctx.lineWidth = s * 2;
           ctx.stroke();
@@ -273,14 +286,13 @@ export default async (api) => {
   async function showDialog(e) {
     const m = await fetch(modeUrl).then((r) => r.json());
     log(m, center, boatpos);
-    const brg = Math.round(boatpos?.initialBearingTo(center) ?? NaN);
-    const rng =
-      Math.round((boatpos?.distanceTo(center) ?? NaN) * nm * 100) / 100;
-    const cog = Math.round(cogsog?.cog ?? NaN);
-    const sog = Math.round((cogsog?.sog ?? NaN) * kn * 10) / 10;
+    const brg = round(boatpos?.initialBearingTo(center));
+    const rng = round(boatpos?.distanceTo(center) * nm, 2);
+    const cog = round(cogsog?.cog);
+    const sog = round(cogsog?.sog * kn, 1);
     const values = { brg, rng, cog, sog };
     const parameters = [];
-    if (m.mode > 1 && center != null) {
+    if (m.mode > 1 && center != null && !isRotated) {
       parameters.push(
         {
           name: "brg",
@@ -317,13 +329,15 @@ export default async (api) => {
       );
     }
 
+    let text = "";
+    if (!hasOverlay)
+      text += "Add KalmanFilter map overlay to enable bearings and fixes! ";
+    if (isRotated) text += "Disable map rotation for data input! ";
+
     api.showDialog(
       {
         title: "Kalman-Filter",
-        text:
-          center != null
-            ? ""
-            : "If buttons are missing, disable chart rotation.",
+        text,
         parameters,
         values,
         buttons: [
@@ -334,16 +348,16 @@ export default async (api) => {
             onClick: (event, values, close) => {
               if (!window.confirm("Reset the Kalman filter?")) return;
               fetch(`${modeUrl}?reset=true`);
-              markers.length = 0;
+              measurements.length = 0;
             },
           },
           {
             name: "delete",
             icon: `${base}icons/delete.svg`,
             shortText: "cleanup",
-            visible: markers.length > 0,
+            visible: measurements.length > 0,
             onClick: (event, values, close) => {
-              markers.length = 0;
+              measurements.length = 0;
             },
           },
           {
@@ -359,7 +373,7 @@ export default async (api) => {
             name: "fix",
             icon: `${base}icons/gps.svg`,
             shortText: "FIX",
-            visible: m.mode != 1 && center != null,
+            visible: m.mode != 1 && center != null && !isRotated,
             onClick: (event, values, close) => {
               if (center != null) {
                 fetch(`${inputUrl}?LON=${center.lon}&LAT=${center.lat}`);
@@ -380,16 +394,19 @@ export default async (api) => {
             name: "rng",
             icon: `${base}icons/range.svg`,
             shortText: "RNG",
-            visible: center != null,
+            visible: center != null && !isRotated,
             disabled: () => !isFinite(values.rng),
             onClick: (event, values, close) => {
-              markers.push({
+              measurements.push({
                 lon: center.lon,
                 lat: center.lat,
                 rng: values.rng / nm,
+                //  arc around BRG instead of full circle
+                a: values.brg + 180 - 45,
+                b: values.brg + 180 + 45,
               });
-              if (markers.length > 20) {
-                markers.splice(0, markers.length - 20);
+              if (measurements.length > 20) {
+                measurements.splice(0, measurements.length - 20);
               }
               if (m.mode > 1) {
                 fetch(
@@ -402,17 +419,17 @@ export default async (api) => {
             name: "brg",
             icon: `${base}icons/compass.svg`,
             shortText: "BRG",
-            visible: center != null,
+            visible: center != null && !isRotated,
             disabled: () => !isFinite(values.brg),
             onClick: (event, values, close) => {
-              markers.push({
+              measurements.push({
                 lon: center.lon,
                 lat: center.lat,
                 brg: values.brg,
                 rng: 2 * (boatpos?.distanceTo(center) ?? 5000),
               });
-              if (markers.length > 20) {
-                markers.splice(0, markers.length - 20);
+              if (measurements.length > 20) {
+                measurements.splice(0, measurements.length - 20);
               }
               if (m.mode > 1) {
                 fetch(
@@ -440,13 +457,15 @@ export default async (api) => {
         // toggle: STOREKEYTOGGLE,
         // visible: STOREKEYMAP,
         mode: "nav.gps.kalman.mode",
+        model: "nav.gps.kalman.model",
       },
-      updateFunction: (state) => {
-        log("state", state);
+      updateFunction: (data) => {
+        log(data);
         return {
-          iconClass: "KF-" + state.mode,
-          // icon: `${state.mode.toLowerCase()}.svg`,
-          // visible: !!state.visible,
+          iconClass:
+            "KF-" + (data.model == 4 && data.mode == "DR" ? "MAN" : data.mode),
+          // icon: `${data.mode.toLowerCase()}.svg`,
+          // visible: !!data.visible,
         };
       },
       onClick: showDialog,
