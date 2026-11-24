@@ -165,7 +165,7 @@ export default async (api) => {
 
       if (measurements.length > 20) measurements.shift();
       function label(text, x, y, rot = 0) {
-        if (text == null) return;
+        if (text == null || !data.labels) return;
         ctx.save();
         ctx.translate(x, y);
         ctx.rotate(radians(rot));
@@ -239,8 +239,8 @@ export default async (api) => {
         [data.Pxy, data.Pyy],
       ];
       const p = [data.confidence];
-      for (const c of p) {
-        const [xs, ys] = covEllipse([0, 0], P, c / 100, 128);
+      if (p > 0) {
+        const [xs, ys] = covEllipse([0, 0], P, p / 100, 128);
         ctx.beginPath();
         ctx.moveTo(xs[0] * ppm, ys[0] * ppm);
         for (let i = 1; i < xs.length; i++) {
@@ -301,6 +301,7 @@ export default async (api) => {
       displayName: "confidence level",
       type: "FLOAT",
       default: 50,
+      list: [0, 100],
       description: "covariance ellipe confidence level [%]",
     },
     show_cog: {
@@ -314,6 +315,12 @@ export default async (api) => {
       type: "BOOLEAN",
       default: true,
       description: "display SET/DFT vector (dotted line)",
+    },
+    labels: {
+      displayName: "show labels",
+      type: "BOOLEAN",
+      default: true,
+      description: "add labels to bearings/ranges",
     },
   });
 
