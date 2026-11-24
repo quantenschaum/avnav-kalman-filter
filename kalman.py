@@ -309,6 +309,7 @@ class Boat(Kalman):
                 return array([[0, 0, vx / v, vy / v]])
 
         elif isnan(speed):  # course only
+            # print("course only")
             if self.stw < 1e-6:
                 return  # no update needed, avoids zero division
             # print('course only')

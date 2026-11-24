@@ -8,12 +8,13 @@ from typing import NamedTuple
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-log = print
+DEV = os.getenv("DEV", "").lower() in {"1", "true", "on", "yes"}
+
 try:
-    from rich import print as log
+    from rich import print
 except:
     pass
-# log = lambda *a: None
+log = print if DEV else lambda *a: None
 
 try:
     from avnav_api import AVNApi
@@ -25,6 +26,7 @@ SOURCE = "kalman"
 PATH_PREFIX = f"gps.{SOURCE}."
 INTERVAL = "interval"
 USE_LOG = "use_log"
+LOG_FAIL = "log_fail"
 NOISE_V = "noise_v"
 NOISE_W = "noise_w"
 TALKER_ID = "talker_id"
@@ -48,6 +50,13 @@ CONFIG = [
         "description": "use log and compass, estimate current, use 6D state vector",
         "type": "BOOLEAN",
         "default": True,
+    },
+    {
+        "name": LOG_FAIL,
+        "description": "detect log failure, ignore log reading if log reports speed=0 and current speed is > threshold (kn, 0=disabled)",
+        "type": "FLOAT",
+        "default": 0,
+        "rangeOrList": [0, 20],
     },
     {
         "name": NOISE_V,
@@ -150,6 +159,7 @@ H_W = ["HDT", "STW"]
 class Entry(NamedTuple):
     value: float
     timestamp: float
+    source: str = SOURCE
 
 
 class Plugin:
@@ -179,7 +189,7 @@ class Plugin:
         log(url, args)
         if url == "input":
             self.input = {
-                k.upper(): Entry(float(v[0]), self.monotonic()) for k, v in args.items()
+                k.upper(): Entry(float(v[0]), monotonic()) for k, v in args.items()
             }
             log(self.input)
             return {"status": "ok"}
@@ -340,13 +350,16 @@ class Plugin:
                     # log(k, v1.value, v1.source, age)
 
             if not self.use_gps:
+                log("[blue]GPS off")
                 for k in POS + C_S:
                     values0.pop(k, None)
                     values1.pop(k, None)
             if not self.use_log:
-                for k in H_W:
-                    values0.pop(k, None)
-                    values1.pop(k, None)
+                log("[blue]LOG off")
+                for k in POS + C_S:
+                    for k in H_W:
+                        values0.pop(k, None)
+                        values1.pop(k, None)
 
             # avaliable input data = data received within last n seconds
             input = [k for k, v in values0.items() if monotonic() - v.timestamp < 15]
@@ -358,6 +371,16 @@ class Plugin:
                 else Mode.DR
             )
             log(mode, boat.n, input)
+
+            slog = self.config[LOG_FAIL] / KN
+            if (
+                slog
+                and "STW" in values1
+                and values1["STW"].value == 0
+                and boat.stw > slog
+            ):
+                log("[red]log failure detected")
+                values1["STW"] = Entry(nan, monotonic())
 
             if self.input:  # inject values received via api
                 values1 = self.input  # replace
@@ -451,7 +474,8 @@ class Plugin:
                 l = "HDT" if k == "CTW" else k
                 u = values1[l].value if l in values1 else nan
                 u *= KN if k in ["SOG", "STW", "DFT"] else 1
-                log(f"{k:>6}  {w:>7}  {u:7.3f}")
+                s = values1[l].source if l in values1 else ""
+                log(f"{k:>6}  {w:>7}  {u:7.3f} {s}")
                 self.writeValue(v, PATH_PREFIX + k)
 
             # if mode > Mode.GPS:
