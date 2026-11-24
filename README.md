@@ -4,12 +4,12 @@ The Kalman Filter plugin estimates the boat's position, course and speed. It use
 
 ![AvNav](avnav.png)
 
-## Models and estimates
+## 4D-model and 6D-model
 
-Choose the model with **Use log and compass** in the plugin settings:
+Choose between them with **Use log and compass** in the plugin settings:
 
-- **Manual** (off, 4D): Uses position and ground velocity. You can enter a fix and update course and speed from the chart dialog; no log or compass is required.
-- **Log and compass** (on, 6D): Uses water speed from the log and heading from the compass, and estimates current as well as position. In dead-reckoning mode, chart fixes, bearings and ranges help correct the estimate. The compass needs to supply true heading.
+- **4D-model** (**Use log and compass** off; manual): Uses position and ground velocity. You can enter a fix and update course and speed from the chart dialog; no log or compass is required.
+- **6D-model** (**Use log and compass** on; log and compass): Uses water speed from the log and heading from the compass, and estimates current as well as position. In dead-reckoning mode, chart fixes, bearings and ranges help correct the estimate. The compass needs to supply true heading.
 
 The displayed current (**SET/DFT**) is inferred from the difference between ground motion (COG/SOG, inferred from absolute references such as GPS position fixes and charted-object bearings/ranges) and water motion (heading/speed from the compass/log). It is a residual estimate, not a direct current measurement: it can include actual current as well as leeway and sensor or model offsets and errors.
 
@@ -23,10 +23,10 @@ The displayed current (**SET/DFT**) is inferred from the difference between grou
 
 ### Plugin settings
 
-- **Use log and compass**: Selects the 4D manual model or 6D log-and-compass model.
+- **Use log and compass**: Selects the **4D-model** when off or the **6D-model** when on.
 - **Log fail**: Sets a water-speed threshold in knots for detecting a failed log. When the log reports zero while the filter's estimated water speed exceeds this threshold, the zero reading is ignored. Set to `0` to disable detection.
 - **Noise V**: Controls process noise for motion. Larger values let the estimate adapt faster but increase uncertainty.
-- **Noise W**: In log-and-compass mode, controls process noise for the estimated current. Larger values let the estimate adapt faster but increase uncertainty.
+- **Noise W**: In the **6D-model**, controls process noise for the estimated current. Larger values let the estimate adapt faster but increase uncertainty.
 - **Measurement errors**: Set the assumed errors to suit your instruments and observations:
   - **Position** and **Range error**: metres.
   - **Speed**: knots.
@@ -47,8 +47,8 @@ The displayed current (**SET/DFT**) is inferred from the difference between grou
 
 Keep the NMEA output priority below that of your real GPS source so the estimate does not take precedence over GPS data.
 
-- In dead-reckoning mode, the filter outputs an RMC sentence, including in the manual (4D) model.
-- In the log-and-compass model, it also outputs a VDR sentence for estimated current.
+- In dead-reckoning mode, the filter outputs an RMC sentence, including in the **4D-model**.
+- In the **6D-model**, it also outputs a VDR sentence for estimated current.
 - NMEA output is suppressed when **GPS off** is selected.
 - For backend diagnostic logging, set the plugin process environment variable `DEV=1`; output is suppressed by default.
 
@@ -76,7 +76,7 @@ The **KF** dialog reports the current state:
    - **BRG**: Enter the true bearing to the centered object and submit it. In dead-reckoning mode this bearing is used as a filter observation; successive bearings can be used for cross-bearings or running fixes.
    - **RNG**: Enter the measured range and submit it. The overlay draws a range arc around the prefilled bearing.
    - **BRG+RNG**: Submit bearing and range together; the overlay draws the bearing line and a narrow range arc.
-   - **C/S** (manual model): Enter course over ground (true) and speed over ground.
+   - **C/S** (**4D-model**): Enter course over ground (true) and speed over ground.
 
 In GPS lock, **BRG**, **RNG** and **BRG+RNG** only plot observations on the chart. In dead-reckoning mode they update the filter unless **draw only** is selected. **draw only** plots the bearing/range observation without applying it to the filter.
 

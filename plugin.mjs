@@ -354,11 +354,11 @@ export default async (api) => {
       );
       if (m.mode > 1) {
         parameters.push({
-          name: "dryrun",
-          displayName: "draw only",
-          description: "draw on chart only, do not update the filter",
+          name: "update",
+          displayName: "update filter",
+          description: "update the filter, disable to only draw on the chart",
           type: "BOOLEAN",
-          default: false,
+          default: true,
         });
       }
     }
@@ -475,10 +475,10 @@ export default async (api) => {
                 //  arc around BRG instead of full circle
                 a: values.brg + 180 - 45,
                 b: values.brg + 180 + 45,
-                alpha: m.mode > 1 && !values.dryrun ? 1 : 0.5,
+                alpha: m.mode > 1 && values.update ? 1 : 0.5,
                 label: `${values.rng.toFixed(2)}nm ${time()}`,
               });
-              if (m.mode > 1 && !values.dryrun) {
+              if (m.mode > 1 && values.update) {
                 fetch(
                   `${inputUrl}?BLON=${obj.lon}&BLAT=${obj.lat}&RNG=${values.rng / nm}`,
                 );
@@ -497,10 +497,10 @@ export default async (api) => {
                 lat: obj.lat,
                 brg: values.brg,
                 rng: 2 * (boat?.pos?.distanceTo(obj) ?? 5000),
-                alpha: m.mode > 1 && !values.dryrun ? 1 : 0.5,
+                alpha: m.mode > 1 && values.update ? 1 : 0.5,
                 label: `${values.brg.toFixed(0)}° ${time()}`,
               });
-              if (m.mode > 1 && !values.dryrun) {
+              if (m.mode > 1 && values.update) {
                 fetch(
                   `${inputUrl}?BLON=${obj.lon}&BLAT=${obj.lat}&BRG=${values.brg}`,
                 );
@@ -521,13 +521,13 @@ export default async (api) => {
                 rng: values.rng / nm,
                 a: values.brg + 180 - 5,
                 b: values.brg + 180 + 5,
-                alpha: m.mode > 1 && !values.dryrun ? 1 : 0.5,
+                alpha: m.mode > 1 && values.update ? 1 : 0.5,
                 label: `${values.brg.toFixed(0)}°/${values.rng.toFixed(2)}nm ${time()}`,
               });
               if (measurements.length > 20) {
                 measurements.splice(0, measurements.length - 20);
               }
-              if (m.mode > 1 && !values.dryrun) {
+              if (m.mode > 1 && values.update) {
                 fetch(
                   `${inputUrl}?BLON=${obj.lon}&BLAT=${obj.lat}&BRG=${values.brg}&RNG=${values.rng / nm}`,
                 );
