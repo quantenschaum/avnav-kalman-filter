@@ -1,6 +1,5 @@
 export default async (api) => {
-  const devmode =
-    new URLSearchParams(window.location.search).get("noCloseDialog") == "true";
+  const devmode = new URLSearchParams(window.location.search).get("dev") == 1;
   function log(...a) {
     if (!devmode) return;
     console.log(
@@ -165,6 +164,17 @@ export default async (api) => {
       }
 
       if (measurements.length > 20) measurements.shift();
+      function label(text, x, y, rot = 0) {
+        if (text == null) return;
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(radians(rot));
+        ctx.font = `${s * 20}px Roboto, Arial, sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "bottom";
+        ctx.fillText(text, 0, 0);
+        ctx.restore();
+      }
       for (const m of measurements) {
         const [bx, by] = map.lonLatToPixel(m.lon, m.lat);
         // marker
@@ -174,11 +184,13 @@ export default async (api) => {
         ctx.beginPath();
         ctx.arc(bx, by, s * 5, 0, radians(360));
         ctx.fill();
+
         if (m.brg == null && m.rng == null) {
           // fix marker
           ctx.beginPath();
-          ctx.arc(bx, by, s * 15, 0, radians(360));
+          ctx.arc(bx, by, s * 10, 0, radians(360));
           ctx.stroke();
+          label(m.label, bx, by - s * 10);
         }
         if (m.brg != null) {
           // bearing line
@@ -190,6 +202,9 @@ export default async (api) => {
           ctx.moveTo(bx, by);
           ctx.lineTo(ex, ey);
           ctx.stroke();
+          const a = to180(m.brg);
+          const b = Math.sign(a) * 90;
+          label(m.label, (bx + ex) / 2, (by + ey) / 2, a - b);
         }
         if (m.rng != null && m.a != null && m.b != null) {
           // range circle
@@ -198,6 +213,14 @@ export default async (api) => {
           const b = m.b ?? 360;
           ctx.arc(bx, by, m.rng * ppm, radians(a - 90), radians(b - 90));
           ctx.stroke();
+          if (m.brg == null) {
+            const a = to180(m.a + to180(m.b - m.a) / 2);
+            const b = Math.abs(a) > 90 ? 180 : 0;
+            const d = m.rng * ppm;
+            const x = bx + d * Math.sin(radians(a));
+            const y = by - d * Math.cos(radians(a));
+            label(m.label, x, y, a + b);
+          }
         }
       }
 
@@ -360,6 +383,14 @@ export default async (api) => {
       text += "Add KalmanFilter map overlay to enable bearings and fixes! ";
     if (isRotated) text += "Disable map rotation for data input! ";
 
+    function time() {
+      return new Date().toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      });
+    }
+
     api.showDialog(
       {
         title: "Kalman-Filter",
@@ -416,6 +447,7 @@ export default async (api) => {
               measurements.push({
                 lon: obj.lon,
                 lat: obj.lat,
+                label: time(),
               });
               if (obj != null) {
                 fetch(`${inputUrl}?LON=${obj.lon}&LAT=${obj.lat}`);
@@ -437,6 +469,7 @@ export default async (api) => {
                 a: values.brg + 180 - 45,
                 b: values.brg + 180 + 45,
                 alpha: m.mode > 1 && !values.dryrun ? 1 : 0.5,
+                label: `${values.rng.toFixed(2)}nm ${time()}`,
               });
               if (m.mode > 1 && !values.dryrun) {
                 fetch(
@@ -458,6 +491,7 @@ export default async (api) => {
                 brg: values.brg,
                 rng: 2 * (boat?.pos?.distanceTo(obj) ?? 5000),
                 alpha: m.mode > 1 && !values.dryrun ? 1 : 0.5,
+                label: `${values.brg.toFixed(0)}° ${time()}`,
               });
               if (m.mode > 1 && !values.dryrun) {
                 fetch(
@@ -481,6 +515,7 @@ export default async (api) => {
                 a: values.brg + 180 - 5,
                 b: values.brg + 180 + 5,
                 alpha: m.mode > 1 && !values.dryrun ? 1 : 0.5,
+                label: `${values.brg.toFixed(0)}°/${values.rng.toFixed(2)}nm ${time()}`,
               });
               if (measurements.length > 20) {
                 measurements.splice(0, measurements.length - 20);
