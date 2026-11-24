@@ -73,11 +73,11 @@ The **KF** button icon indicates the filter's current mode, and the **KF** dialo
 2. Center the charted object before opening **KF**. The chart center is captured when the dialog opens.
 3. When the center is usable, bearing and range fields are available in GPS-lock and dead-reckoning modes. They are prefilled with the estimated bearing and range from the boat to the chart center when a position estimate is available.
 4. Choose an action:
-   - **Fix**: Uses the chart center as the boat's observed position, for example when close to a buoy or other known object. Available before initialization and in dead-reckoning mode, but not while locked to GPS; a marker is drawn at the fix location.
-   - **BRG**: Enter the true bearing to the centered object and submit it. In dead-reckoning mode this bearing is used as a filter observation; successive bearings can be used for cross-bearings or running fixes.
-   - **RNG**: Enter the measured range and submit it. The overlay draws a range arc around the prefilled bearing.
-   - **BRG+RNG**: Submit bearing and range together; the overlay draws the bearing line and a narrow range arc.
-   - **C/S** (**4D-model**): In manual dead-reckoning mode, enter course over ground (true) and speed over ground. The button is available after initialization in that mode.
+   - ![Fix icon](icons/gps.svg) **Fix**: Uses the chart center as the boat's observed position, for example when close to a buoy or other known object. Available before initialization and in dead-reckoning mode, but not while locked to GPS; a marker is drawn at the fix location.
+   - ![BRG icon](icons/compass.svg) **BRG**: Enter the true bearing to the centered object and submit it. In dead-reckoning mode this bearing is used as a filter observation; successive bearings can be used for cross-bearings or running fixes.
+   - ![RNG icon](icons/range.svg) **RNG**: Enter the measured range and submit it. The overlay draws a range arc around the prefilled bearing.
+   - ![BRG+RNG icon](icons/radar.svg) **BRG+RNG**: Submit bearing and range together; the overlay draws the bearing line and a narrow range arc.
+   - ![C/S icon](icons/speed.svg) **C/S** (**4D-model**): In manual dead-reckoning mode, enter course over ground (true) and speed over ground. The button is available after initialization in that mode.
 
 In GPS lock, **BRG**, **RNG** and **BRG+RNG** only plot observations on the chart. In dead-reckoning mode they update the filter by default. The **update filter** setting is enabled by default; disable it to plot bearing/range observations on the chart without applying them to the filter.
 
@@ -85,5 +85,5 @@ With **Show labels** enabled, plotted markers include their entry time, and bear
 
 ### Reset and clear markers
 
-- **Reset** restarts the filter and clears plotted markers.
-- **Cleanup** clears observation markers from the overlay; it does not undo observations already incorporated by the filter.
+- ![Reset icon](icons/reset.svg) **Reset** restarts the filter and clears plotted markers.
+- ![Cleanup icon](icons/eraser.svg) **Cleanup** clears observation markers from the overlay; it does not undo observations already incorporated by the filter.
