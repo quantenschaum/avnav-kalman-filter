@@ -164,6 +164,7 @@ export default async (api) => {
         ctx.stroke();
       }
 
+      if (measurements.length > 20) measurements.shift();
       for (const m of measurements) {
         const [bx, by] = map.lonLatToPixel(m.lon, m.lat);
         // marker
@@ -173,8 +174,14 @@ export default async (api) => {
         ctx.beginPath();
         ctx.arc(bx, by, s * 5, 0, radians(360));
         ctx.fill();
+        if (m.brg == null && m.rng == null) {
+          // fix marker
+          ctx.beginPath();
+          ctx.arc(bx, by, s * 15, 0, radians(360));
+          ctx.stroke();
+        }
         if (m.brg != null) {
-          // bearing ling
+          // bearing line
           const brg = radians(m.brg + 180);
           const d = 1.1 * m.rng * ppm;
           const ex = bx + d * Math.sin(brg);
@@ -298,7 +305,7 @@ export default async (api) => {
     const sog = round(boat?.sog * kn, 1);
     const values = { brg, rng, cog, sog };
     const parameters = [];
-    if (m.mode > 1 && obj != null && !isRotated) {
+    if (obj != null && !isRotated) {
       parameters.push(
         {
           name: "brg",
@@ -315,6 +322,15 @@ export default async (api) => {
           list: [0, 100],
         },
       );
+      if (m.mode > 1) {
+        parameters.push({
+          name: "dryrun",
+          displayName: "draw only",
+          description: "draw on chart only, do not update the filter",
+          type: "BOOLEAN",
+          default: false,
+        });
+      }
     }
     if (m.mode > 1 && m.model == 4) {
       parameters.push(
@@ -363,7 +379,7 @@ export default async (api) => {
           },
           {
             name: "cleanup",
-            icon: `${base}icons/mop.svg`,
+            icon: `${base}icons/eraser.svg`,
             shortText: "cleanup",
             visible: measurements.length > 0,
             onClick: (event, values, close) => {
@@ -380,34 +396,29 @@ export default async (api) => {
             },
           },
           {
-            name: "fix",
-            icon: `${base}icons/gps.svg`,
-            shortText: "FIX",
-            visible: m.mode != 1 && obj != null && !isRotated,
-            onClick: (event, values, close) => {
-              if (obj != null) {
-                fetch(`${inputUrl}?LON=${obj.lon}&LAT=${obj.lat}`);
-              }
-            },
-          },
-          {
             name: "c_s",
             icon: `${base}icons/speed.svg`,
             shortText: "C/S",
             visible: m.mode > 1 && m.model == 4,
             disabled: () => !(isFinite(values.cog) && isFinite(values.sog)),
             onClick: (event, values, close) => {
+              if (m.mode > 1 && m.model == 4) {
+                fetch(`${inputUrl}?COG=${values.cog}&SOG=${values.sog / kn}`);
+              }
+            },
+          },
+          {
+            name: "fix",
+            icon: `${base}icons/gps.svg`,
+            shortText: "FIX",
+            visible: m.mode != 1 && obj != null && !isRotated,
+            onClick: (event, values, close) => {
               measurements.push({
                 lon: obj.lon,
                 lat: obj.lat,
-                rng: values.rng / nm,
-                //  arc around BRG instead of full circle
-                a: values.brg + 180 - 45,
-                b: values.brg + 180 + 45,
-                alpha: m.mode != 1 ? 1 : 0.5,
               });
-              if (m.mode != 1) {
-                fetch(`${inputUrl}?COG=${values.cog}&SOG=${values.sog / kn}`);
+              if (obj != null) {
+                fetch(`${inputUrl}?LON=${obj.lon}&LAT=${obj.lat}`);
               }
             },
           },
@@ -425,12 +436,9 @@ export default async (api) => {
                 //  arc around BRG instead of full circle
                 a: values.brg + 180 - 45,
                 b: values.brg + 180 + 45,
-                alpha: m.mode > 1 ? 1 : 0.5,
+                alpha: m.mode > 1 && !values.dryrun ? 1 : 0.5,
               });
-              if (measurements.length > 20) {
-                measurements.splice(0, measurements.length - 20);
-              }
-              if (m.mode > 1) {
+              if (m.mode > 1 && !values.dryrun) {
                 fetch(
                   `${inputUrl}?BLON=${obj.lon}&BLAT=${obj.lat}&RNG=${values.rng / nm}`,
                 );
@@ -449,12 +457,9 @@ export default async (api) => {
                 lat: obj.lat,
                 brg: values.brg,
                 rng: 2 * (boat?.pos?.distanceTo(obj) ?? 5000),
-                alpha: m.mode > 1 ? 1 : 0.5,
+                alpha: m.mode > 1 && !values.dryrun ? 1 : 0.5,
               });
-              if (measurements.length > 20) {
-                measurements.splice(0, measurements.length - 20);
-              }
-              if (m.mode > 1) {
+              if (m.mode > 1 && !values.dryrun) {
                 fetch(
                   `${inputUrl}?BLON=${obj.lon}&BLAT=${obj.lat}&BRG=${values.brg}`,
                 );
@@ -475,12 +480,12 @@ export default async (api) => {
                 rng: values.rng / nm,
                 a: values.brg + 180 - 5,
                 b: values.brg + 180 + 5,
-                alpha: m.mode > 1 ? 1 : 0.5,
+                alpha: m.mode > 1 && !values.dryrun ? 1 : 0.5,
               });
               if (measurements.length > 20) {
                 measurements.splice(0, measurements.length - 20);
               }
-              if (m.mode > 1) {
+              if (m.mode > 1 && !values.dryrun) {
                 fetch(
                   `${inputUrl}?BLON=${obj.lon}&BLAT=${obj.lat}&BRG=${values.brg}&RNG=${values.rng / nm}`,
                 );
