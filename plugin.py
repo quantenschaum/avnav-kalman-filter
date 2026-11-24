@@ -146,6 +146,7 @@ class Mode(IntEnum):
     OFF = 0  # not initialized
     GPS = 1  # locked to GPS
     DR = 2  # dead reckoning
+    DRM = 3  # dead reckoning, manual entry
 
     def __str__(self) -> str:
         return self.name
@@ -368,6 +369,8 @@ class Plugin:
                 else Mode.GPS
                 if input and all(k in input for k in POS)
                 else Mode.DR
+                if boat.n > 4
+                else Mode.DRM
             )
             log(mode, boat.n, input)
 

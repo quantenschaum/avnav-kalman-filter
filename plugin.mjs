@@ -102,7 +102,6 @@ export default async (api) => {
       pos: "nav.gps.position",
       cog: "nav.gps.course",
       sog: "nav.gps.speed",
-      model: "nav.gps.kalman.model",
       LON: "nav.gps.kalman.LON",
       LAT: "nav.gps.kalman.LAT",
       Pxx: "nav.gps.kalman.Pxx",
@@ -114,6 +113,7 @@ export default async (api) => {
       STW: "nav.gps.kalman.STW",
       SET: "nav.gps.kalman.SET",
       DFT: "nav.gps.kalman.DFT",
+      model: "nav.gps.kalman.model",
       cvt: "properties.navBoatCourseTime",
     },
     initFunction: function (map, data) {
@@ -262,37 +262,31 @@ export default async (api) => {
         ctx.stroke();
       }
 
-      if (data.show_cog && data.COG != null && data.SOG != null) {
-        const cog = radians(data.COG);
+      function speedvector(crs, spd, dash = []) {
+        if (crs == null || spd == null) return;
+        crs = radians(crs);
+        spd *= data.cvt * ppm;
         ctx.beginPath();
         ctx.moveTo(0, 0);
-        ctx.lineTo(
-          Math.sin(cog) * data.cvt * data.SOG * ppm,
-          -Math.cos(cog) * data.cvt * data.SOG * ppm,
-        );
+        ctx.lineTo(Math.sin(crs) * spd, -Math.cos(crs) * spd);
         ctx.lineWidth = s * 2;
         ctx.strokeStyle = data.color;
+        ctx.setLineDash(dash);
         ctx.globalAlpha = 0.8;
         ctx.stroke();
       }
 
-      if (data.show_dft && data.SET != null && data.DFT != null) {
-        const set = radians(data.SET);
-        ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.lineTo(
-          Math.sin(set) * data.cvt * data.DFT * ppm,
-          -Math.cos(set) * data.cvt * data.DFT * ppm,
-        );
-        ctx.setLineDash([s * 2, s * 2]);
-        ctx.lineWidth = s * 2;
-        ctx.strokeStyle = data.color;
-        ctx.globalAlpha = 0.8;
-        ctx.stroke();
-        ctx.setLineDash([]);
-
-        ctx.restore();
+      if (data.show_cog) {
+        speedvector(data.COG, data.SOG);
       }
+      if (data.show_ctw) {
+        speedvector(data.CTW, data.STW, [s * 6, s * 6]);
+      }
+      if (data.show_dft) {
+        speedvector(data.SET, data.DFT, [s * 2, s * 2]);
+      }
+
+      ctx.restore();
     },
   };
 
@@ -314,13 +308,19 @@ export default async (api) => {
       displayName: "COG vector",
       type: "BOOLEAN",
       default: true,
-      description: "display COG/SOG vector (solid line)",
+      description: "display COG/SOG ground speed vector (solid line)",
+    },
+    show_ctw: {
+      displayName: "CTW vector",
+      type: "BOOLEAN",
+      default: false,
+      description: "display CTW/STW water speed vector (dashed line)",
     },
     show_dft: {
       displayName: "DFT vector",
       type: "BOOLEAN",
       default: true,
-      description: "display SET/DFT vector (dotted line)",
+      description: "display SET/DFT current vector (dotted line)",
     },
     labels: {
       displayName: "show labels",
@@ -368,7 +368,7 @@ export default async (api) => {
         });
       }
     }
-    if (m.mode > 1 && m.model == 4) {
+    if (m.mode == 3) {
       parameters.push(
         {
           name: "cog",
@@ -388,10 +388,10 @@ export default async (api) => {
     }
 
     let text = "";
-    if (m.mode == 0) text += "Filter not initialized, provide a fix to start. ";
+    if (m.mode < 1) text += "Filter not initialized, provide a fix to start. ";
     if (m.mode == 1)
       text += "Locked to GPS, measurements will not affect the filter. ";
-    if (m.mode == 2) text += "Dead reckoning. ";
+    if (m.mode > 1) text += "Dead reckoning. ";
     if (!hasOverlay)
       text += "Add KalmanFilter map overlay to enable bearings and fixes! ";
     if (disabled) text += "Disable map rotation for data input! ";
@@ -444,10 +444,10 @@ export default async (api) => {
             name: "c_s",
             icon: `${base}icons/speed.svg`,
             shortText: "C/S",
-            visible: m.mode > 1 && m.model == 4,
+            visible: m.mode == 3,
             disabled: () => !(isFinite(values.cog) && isFinite(values.sog)),
             onClick: (event, vals, close) => {
-              if (m.mode > 1 && m.model == 4) {
+              if (m.mode == 3) {
                 fetch(`${inputUrl}?COG=${vals.cog}&SOG=${vals.sog / kn}`);
               }
             },
@@ -571,8 +571,7 @@ export default async (api) => {
       updateFunction: (data) => {
         log(data);
         return {
-          iconClass:
-            "KF-" + (data.model == 4 && data.mode == "DR" ? "MAN" : data.mode),
+          iconClass: "KF-" + data.mode,
           // icon: `${data.mode.toLowerCase()}.svg`,
           // visible: !!data.visible,
         };
