@@ -1,6 +1,6 @@
 # Dead Reckoning Plugin for AvNav
 
-The Kalman Filter plugin estimates the boat's position, course and speed. It uses an iterative extended Kalman filter (iEKF), combining motion data with GPS fixes and observations you enter on the chart. When recent GPS positions are available, it follows them; when they stop, it continues in dead-reckoning mode.
+The Kalman Filter plugin estimates the boat's position, course and speed. It uses an [iterated extended Kalman filter (iEKF)](https://en.wikipedia.org/wiki/Extended_Kalman_filter), combining motion data with GPS fixes and observations you enter on the chart. When recent GPS positions are available, it follows them; when they stop, it continues in dead-reckoning mode.
 
 ![AvNav](avnav.png)
 
