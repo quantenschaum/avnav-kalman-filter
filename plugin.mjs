@@ -99,6 +99,7 @@ export default async (api) => {
     type: "map",
     storeKeys: {
       rtime: "nav.gps.rtime",
+      var: "nav.gps.magVariation",
       pos: "nav.gps.position",
       cog: "nav.gps.course",
       sog: "nav.gps.speed",
@@ -146,6 +147,7 @@ export default async (api) => {
       rtime = data.rtime;
       boatdata = {
         rtime: data.rtime,
+        var: data.var,
         pos: data.pos ? LonLat(data.pos?.lon, data.pos?.lat) : null,
         cog: data.cog,
         sog: data.sog,
@@ -335,30 +337,45 @@ export default async (api) => {
     const obj = center; // freeze map center on dialog open
     const boat = boatdata;
     log(m, obj, boat);
-    const brg = round(boat?.pos?.initialBearingTo(obj));
+    const brg = round(
+      to360(boat?.pos?.initialBearingTo(obj) - (boat?.var ?? 0)),
+    );
     const rng = round(boat?.pos?.distanceTo(obj) * nm, 2);
     const cog = round(boat?.cog);
     const sog = round(boat?.sog * kn, 1);
-    const values = { brg, rng, cog, sog, update: m.mode > 1 };
+    const values = {
+      brg,
+      rng,
+      cog,
+      sog,
+      update: m.mode > 1,
+      magnetic: boat?.var,
+    };
     const parameters = [];
     const disabled = avnavVersion < 20261124 && isRotated;
     if (obj != null && !disabled) {
-      parameters.push(
-        {
-          name: "brg",
-          displayName: "BRG (T)",
-          description: "bearing to object at map obj",
-          type: "FLOAT",
-          list: [0, 360],
-        },
-        {
-          name: "rng",
-          displayName: "RNG (nm)",
-          description: "range to object at map obj",
-          type: "FLOAT",
-          list: [0, 100],
-        },
-      );
+      parameters.push({
+        name: "brg",
+        displayName: values.magnetic ? "BRG" : "BRG (T)",
+        description: "bearing to object at map obj",
+        type: "FLOAT",
+        list: [0, 360],
+      });
+      if (values.magnetic) {
+        parameters.push({
+          name: "magnetic",
+          displayName: "magnetic",
+          description: "magnetic bearing",
+          type: "BOOLEAN",
+        });
+      }
+      parameters.push({
+        name: "rng",
+        displayName: "RNG (nm)",
+        description: "range to object at map obj",
+        type: "FLOAT",
+        list: [0, 100],
+      });
       if (m.mode > 1) {
         parameters.push({
           name: "update",
@@ -473,16 +490,17 @@ export default async (api) => {
             icon: `${base}icons/range.svg`,
             shortText: "RNG",
             visible: obj != null && !disabled,
-            disabled: () => !isFinite(values.rng),
+            disabled: () => !isFinite(values.rng) || !isFinite(values.rng),
             onClick: (event, vals, close) => {
               log(vals);
+              const brg = to360(vals.brg + (vals.magnetic ? boat.var : 0));
               measurements.push({
                 lon: obj.lon,
                 lat: obj.lat,
                 rng: vals.rng / nm,
                 //  arc around BRG instead of full circle
-                a: vals.brg + 180 - 45,
-                b: vals.brg + 180 + 45,
+                a: brg + 180 - 45,
+                b: brg + 180 + 45,
                 alpha: vals.update ? 1 : 0.5,
                 label: `${vals.rng.toFixed(2)}nm ${time()}`,
               });
@@ -501,18 +519,17 @@ export default async (api) => {
             disabled: () => !isFinite(values.brg),
             onClick: (event, vals, close) => {
               log(vals);
+              const brg = to360(vals.brg + (vals.magnetic ? boat.var : 0));
               measurements.push({
                 lon: obj.lon,
                 lat: obj.lat,
-                brg: vals.brg,
+                brg,
                 rng: 2 * (boat?.pos?.distanceTo(obj) ?? 5000),
                 alpha: vals.update ? 1 : 0.5,
-                label: `${vals.brg.toFixed(0)}° ${time()}`,
+                label: `${vals.brg.toFixed(0)}°${vals.magnetic ? "M" : "T"} ${time()}`,
               });
               if (vals.update) {
-                fetch(
-                  `${inputUrl}?BLON=${obj.lon}&BLAT=${obj.lat}&BRG=${vals.brg}`,
-                );
+                fetch(`${inputUrl}?BLON=${obj.lon}&BLAT=${obj.lat}&BRG=${brg}`);
               }
             },
           },
@@ -524,22 +541,20 @@ export default async (api) => {
             disabled: () => !isFinite(values.brg) || !isFinite(values.rng),
             onClick: (event, vals, close) => {
               log(vals);
+              const brg = to360(vals.brg + (vals.magnetic ? boat.var : 0));
               measurements.push({
                 lon: obj.lon,
                 lat: obj.lat,
                 brg: vals.brg,
                 rng: vals.rng / nm,
-                a: vals.brg + 180 - 5,
-                b: vals.brg + 180 + 5,
+                a: brg + 180 - 5,
+                b: brg + 180 + 5,
                 alpha: vals.update ? 1 : 0.5,
-                label: `${vals.brg.toFixed(0)}°/${vals.rng.toFixed(2)}nm ${time()}`,
+                label: `${vals.brg.toFixed(0)}°${vals.magnetic ? "M" : "T"}/${vals.rng.toFixed(2)}nm ${time()}`,
               });
-              if (measurements.length > 20) {
-                measurements.splice(0, measurements.length - 20);
-              }
               if (vals.update) {
                 fetch(
-                  `${inputUrl}?BLON=${obj.lon}&BLAT=${obj.lat}&BRG=${vals.brg}&RNG=${vals.rng / nm}`,
+                  `${inputUrl}?BLON=${obj.lon}&BLAT=${obj.lat}&BRG=${brg}&RNG=${vals.rng / nm}`,
                 );
               }
             },

@@ -71,17 +71,17 @@ The **KF** button icon indicates the filter's current mode, and the **KF** dialo
 
 1. Add the **KalmanFilter** overlay. On AvNav versions older than `20261124`, disable map rotation before entering observations; newer versions support rotated maps.
 2. Center the charted object before opening **KF**. The chart center is captured when the dialog opens.
-3. When the center is usable, bearing and range fields are available in GPS-lock and dead-reckoning modes. They are prefilled with the estimated bearing and range from the boat to the chart center when a position estimate is available.
+3. When the center is usable, bearing and range fields are available in GPS-lock and dead-reckoning modes. They are prefilled with the estimated bearing and range from the boat to the chart center when a position estimate is available. If AvNav supplies magnetic variation, the dialog also offers a **magnetic** checkbox and pre-fills the bearing as magnetic; otherwise bearings are true.
 4. Choose an action:
    - ![Fix icon](icons/gps.svg) **Fix**: Uses the chart center as the boat's observed position, for example when close to a buoy or other known object. Available before initialization and in dead-reckoning mode, but not while locked to GPS; a marker is drawn at the fix location.
-   - ![BRG icon](icons/compass.svg) **BRG**: Enter the true bearing to the centered object and submit it. In dead-reckoning mode this bearing is used as a filter observation; successive bearings can be used for cross-bearings or running fixes.
-   - ![RNG icon](icons/range.svg) **RNG**: Enter the measured range and submit it. The overlay draws a range arc around the prefilled bearing.
-   - ![BRG+RNG icon](icons/radar.svg) **BRG+RNG**: Submit bearing and range together; the overlay draws the bearing line and a narrow range arc.
+   - ![BRG icon](icons/compass.svg) **BRG**: Enter the bearing to the centered object. Select **magnetic** for a magnetic bearing; when updating the filter, the plugin converts it to true before submission. In dead-reckoning mode the bearing is used as a filter observation; successive bearings can be used for cross-bearings or running fixes.
+   - ![RNG icon](icons/range.svg) **RNG**: Enter the measured range and submit it. The overlay draws a range arc around the prefilled bearing (or the bearing entered in the dialog).
+   - ![BRG+RNG icon](icons/radar.svg) **BRG+RNG**: Submit bearing and range together. Select **magnetic** if needed; when updating the filter, the plugin converts the bearing to true before submission. The overlay draws the bearing line and a narrow range arc.
    - ![C/S icon](icons/speed.svg) **C/S** (**4D-model**): In manual dead-reckoning mode, enter course over ground (true) and speed over ground. The button is available after initialization in that mode.
 
 In GPS lock, **BRG**, **RNG** and **BRG+RNG** only plot observations on the chart. In dead-reckoning mode they update the filter by default. The **update filter** setting is enabled by default; disable it to plot bearing/range observations on the chart without applying them to the filter.
 
-With **Show labels** enabled, plotted markers include their entry time, and bearing/range markers also show the entered values. The overlay retains up to 20 recent markers.
+With **Show labels** enabled, plotted markers include their entry time, and bearing/range markers also show the entered values; bearing labels are marked **M** or **T** for magnetic or true. The overlay retains up to 20 recent markers.
 
 ### Reset and clear markers
 
