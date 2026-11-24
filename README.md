@@ -15,7 +15,7 @@ The displayed current (**SET/DFT**) is inferred from the difference between grou
 
 ## Install
 
-1. Upload the plugin ZIP from AvNav's **Plugins** page. NumPy must be installed in AvNav's Python environment.
+1. Upload the plugin ZIP from releases on AvNav's **Plugins** page. NumPy must be installed in AvNav's Python environment.
 2. Add the **KalmanFilter** map overlay: **Layout → Edit → On map → Add KalmanFilter**. The overlay provides the chart context for fixes, bearings and ranges.
 
 ## Configure
