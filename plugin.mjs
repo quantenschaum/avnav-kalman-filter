@@ -8,8 +8,8 @@ export default async (api) => {
       ...a,
     );
   }
-  log("start", api);
-
+  log("start", api, api.getAvNavVersion());
+  const avnavVersion = api.getAvNavVersion();
   const LatLon = api.LatLon();
 
   function LonLat(lon, lat) {
@@ -89,6 +89,7 @@ export default async (api) => {
 
   let hasOverlay = false;
   let isRotated = false;
+  let rtime = null;
   let center = null;
   let boatdata = null;
   const measurements = [];
@@ -97,6 +98,7 @@ export default async (api) => {
     name: "KalmanFilter",
     type: "map",
     storeKeys: {
+      rtime: "nav.gps.rtime",
       pos: "nav.gps.position",
       cog: "nav.gps.course",
       sog: "nav.gps.speed",
@@ -134,12 +136,16 @@ export default async (api) => {
       const s = map.getScale();
       const r = map.getRotation();
       isRotated = r != 0;
-      const [w0, h0] = map.getDimensions();
-      const [w, h] = [w0 / s, h0 / s];
+      let [w, h] = map.getDimensions();
+      if (avnavVersion < 20261124) {
+        [w, h] = [w / s, w / s];
+      }
       center = LonLat(...map.pixelToLonLat(w / 2, h / 2));
 
       if (data.LON == null && data.LAT == null) return;
+      rtime = data.rtime;
       boatdata = {
+        rtime: data.rtime,
         pos: data.pos ? LonLat(data.pos?.lon, data.pos?.lat) : null,
         cog: data.cog,
         sog: data.sog,
@@ -333,9 +339,10 @@ export default async (api) => {
     const rng = round(boat?.pos?.distanceTo(obj) * nm, 2);
     const cog = round(boat?.cog);
     const sog = round(boat?.sog * kn, 1);
-    const values = { brg, rng, cog, sog };
+    const values = { brg, rng, cog, sog, update: m.mode > 1 };
     const parameters = [];
-    if (obj != null && !isRotated) {
+    const disabled = avnavVersion < 20261124 && isRotated;
+    if (obj != null && !disabled) {
       parameters.push(
         {
           name: "brg",
@@ -358,7 +365,6 @@ export default async (api) => {
           displayName: "update filter",
           description: "update the filter, disable to only draw on the chart",
           type: "BOOLEAN",
-          default: true,
         });
       }
     }
@@ -388,10 +394,11 @@ export default async (api) => {
     if (m.mode == 2) text += "Dead reckoning. ";
     if (!hasOverlay)
       text += "Add KalmanFilter map overlay to enable bearings and fixes! ";
-    if (isRotated) text += "Disable map rotation for data input! ";
+    if (disabled) text += "Disable map rotation for data input! ";
 
     function time() {
-      return new Date().toLocaleTimeString([], {
+      const t = rtime ?? new Date();
+      return t.toLocaleTimeString([], {
         hour: "2-digit",
         minute: "2-digit",
         hour12: false,
@@ -409,7 +416,7 @@ export default async (api) => {
           {
             name: "reset",
             icon: `${base}icons/reset.svg`,
-            onClick: (event, values, close) => {
+            onClick: (event, vals, close) => {
               if (!window.confirm("Reset the Kalman filter?")) return;
               fetch(`${modeUrl}?reset=true`);
               measurements.length = 0;
@@ -420,7 +427,7 @@ export default async (api) => {
             icon: `${base}icons/eraser.svg`,
             shortText: "cleanup",
             visible: measurements.length > 0,
-            onClick: (event, values, close) => {
+            onClick: (event, vals, close) => {
               measurements.length = 0;
             },
           },
@@ -429,7 +436,7 @@ export default async (api) => {
             icon: `${base}icons/sat.svg`,
             shortText: "GPS off",
             toggle: !m.gps,
-            onClick: (event, values, close) => {
+            onClick: (event, vals, close) => {
               fetch(`${modeUrl}?gps=${!m.gps}`);
             },
           },
@@ -439,9 +446,9 @@ export default async (api) => {
             shortText: "C/S",
             visible: m.mode > 1 && m.model == 4,
             disabled: () => !(isFinite(values.cog) && isFinite(values.sog)),
-            onClick: (event, values, close) => {
+            onClick: (event, vals, close) => {
               if (m.mode > 1 && m.model == 4) {
-                fetch(`${inputUrl}?COG=${values.cog}&SOG=${values.sog / kn}`);
+                fetch(`${inputUrl}?COG=${vals.cog}&SOG=${vals.sog / kn}`);
               }
             },
           },
@@ -449,8 +456,8 @@ export default async (api) => {
             name: "fix",
             icon: `${base}icons/gps.svg`,
             shortText: "FIX",
-            visible: m.mode != 1 && obj != null && !isRotated,
-            onClick: (event, values, close) => {
+            visible: m.mode != 1 && obj != null && !disabled,
+            onClick: (event, vals, close) => {
               measurements.push({
                 lon: obj.lon,
                 lat: obj.lat,
@@ -465,22 +472,23 @@ export default async (api) => {
             name: "rng",
             icon: `${base}icons/range.svg`,
             shortText: "RNG",
-            visible: obj != null && !isRotated,
+            visible: obj != null && !disabled,
             disabled: () => !isFinite(values.rng),
-            onClick: (event, values, close) => {
+            onClick: (event, vals, close) => {
+              log(vals);
               measurements.push({
                 lon: obj.lon,
                 lat: obj.lat,
-                rng: values.rng / nm,
+                rng: vals.rng / nm,
                 //  arc around BRG instead of full circle
-                a: values.brg + 180 - 45,
-                b: values.brg + 180 + 45,
-                alpha: m.mode > 1 && values.update ? 1 : 0.5,
-                label: `${values.rng.toFixed(2)}nm ${time()}`,
+                a: vals.brg + 180 - 45,
+                b: vals.brg + 180 + 45,
+                alpha: vals.update ? 1 : 0.5,
+                label: `${vals.rng.toFixed(2)}nm ${time()}`,
               });
-              if (m.mode > 1 && values.update) {
+              if (vals.update) {
                 fetch(
-                  `${inputUrl}?BLON=${obj.lon}&BLAT=${obj.lat}&RNG=${values.rng / nm}`,
+                  `${inputUrl}?BLON=${obj.lon}&BLAT=${obj.lat}&RNG=${vals.rng / nm}`,
                 );
               }
             },
@@ -489,20 +497,21 @@ export default async (api) => {
             name: "brg",
             icon: `${base}icons/compass.svg`,
             shortText: "BRG",
-            visible: obj != null && !isRotated,
+            visible: obj != null && !disabled,
             disabled: () => !isFinite(values.brg),
-            onClick: (event, values, close) => {
+            onClick: (event, vals, close) => {
+              log(vals);
               measurements.push({
                 lon: obj.lon,
                 lat: obj.lat,
-                brg: values.brg,
+                brg: vals.brg,
                 rng: 2 * (boat?.pos?.distanceTo(obj) ?? 5000),
-                alpha: m.mode > 1 && values.update ? 1 : 0.5,
-                label: `${values.brg.toFixed(0)}° ${time()}`,
+                alpha: vals.update ? 1 : 0.5,
+                label: `${vals.brg.toFixed(0)}° ${time()}`,
               });
-              if (m.mode > 1 && values.update) {
+              if (vals.update) {
                 fetch(
-                  `${inputUrl}?BLON=${obj.lon}&BLAT=${obj.lat}&BRG=${values.brg}`,
+                  `${inputUrl}?BLON=${obj.lon}&BLAT=${obj.lat}&BRG=${vals.brg}`,
                 );
               }
             },
@@ -511,31 +520,35 @@ export default async (api) => {
             name: "brgrng",
             icon: `${base}icons/radar.svg`,
             shortText: "BRG+RNG",
-            visible: obj != null && !isRotated,
+            visible: obj != null && !disabled,
             disabled: () => !isFinite(values.brg) || !isFinite(values.rng),
-            onClick: (event, values, close) => {
+            onClick: (event, vals, close) => {
+              log(vals);
               measurements.push({
                 lon: obj.lon,
                 lat: obj.lat,
-                brg: values.brg,
-                rng: values.rng / nm,
-                a: values.brg + 180 - 5,
-                b: values.brg + 180 + 5,
-                alpha: m.mode > 1 && values.update ? 1 : 0.5,
-                label: `${values.brg.toFixed(0)}°/${values.rng.toFixed(2)}nm ${time()}`,
+                brg: vals.brg,
+                rng: vals.rng / nm,
+                a: vals.brg + 180 - 5,
+                b: vals.brg + 180 + 5,
+                alpha: vals.update ? 1 : 0.5,
+                label: `${vals.brg.toFixed(0)}°/${vals.rng.toFixed(2)}nm ${time()}`,
               });
               if (measurements.length > 20) {
                 measurements.splice(0, measurements.length - 20);
               }
-              if (m.mode > 1 && values.update) {
+              if (vals.update) {
                 fetch(
-                  `${inputUrl}?BLON=${obj.lon}&BLAT=${obj.lat}&BRG=${values.brg}&RNG=${values.rng / nm}`,
+                  `${inputUrl}?BLON=${obj.lon}&BLAT=${obj.lat}&BRG=${vals.brg}&RNG=${vals.rng / nm}`,
                 );
               }
             },
           },
         ],
-        onChange: (event, changed) => Object.assign(values, changed),
+        onChange: (event, changed) => {
+          Object.assign(values, changed);
+          log(values);
+        },
       },
       e,
     );

@@ -405,6 +405,7 @@ class Plugin:
                     # mode = Mode.GPS
                     log("[red]scale", scale, "offset", x0, y0)
                 x, y = toGrid(lon, lat)
+                log("[yellow]pos", x, y)
                 boat.measure_position(x, y, self.config[POS_ERROR])
                 updated.append("POS")
 
@@ -412,10 +413,12 @@ class Plugin:
                 cerr, serr = self.config[CRS_ERROR], self.config[SPD_ERROR]
                 if boat.n > 4 and all(k in values1 for k in H_W):
                     hdt, stw = [values1[k].value for k in H_W]
+                    log("[yellow]hdt/stw", hdt, stw)
                     boat.measure_velocity(hdt, stw, cerr, serr)
                     updated.append("H/W")
                 if boat.n == 4 and all(k in values1 for k in C_S):
                     cog, sog = [values1[k].value for k in C_S]
+                    log("[yellow]cog/sog", cog, sog)
                     boat.measure_velocity(cog, sog, cerr, serr, reset=True)
                     updated.append("C/S")
 
@@ -423,6 +426,7 @@ class Plugin:
                 if all(k in values1 for k in BRG):
                     lon, lat, brg = [values1[k].value for k in BRG]
                     x, y = toGrid(lon, lat)
+                    log("[yellow]brg", x, y, brg)
                     boat.measure_bearing(x, y, brg, self.config[BRG_ERROR])
                     updated.append("BRG")
 
@@ -430,6 +434,7 @@ class Plugin:
                 if all(k in values1 for k in RNG):
                     lon, lat, rng = [values1[k].value for k in RNG]
                     x, y = toGrid(lon, lat)
+                    log("[yellow]rng", x, y, rng)
                     boat.measure_range(x, y, rng, self.config[RNG_ERROR])
                     updated.append("RNG")
 

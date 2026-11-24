@@ -17,7 +17,6 @@ The displayed current (**SET/DFT**) is inferred from the difference between grou
 
 1. Upload the plugin ZIP from AvNav's **Plugins** page. NumPy must be installed in AvNav's Python environment.
 2. Add the **KalmanFilter** map overlay: **Layout → Edit → On map → Add KalmanFilter**. The overlay provides the chart context for fixes, bearings and ranges.
-3. Disable map rotation before entering chart-based data. These controls are unavailable while the map is rotated ([#718](https://github.com/wellenvogel/avnav/issues/718)).
 
 ## Configure
 
@@ -78,7 +77,7 @@ The **KF** dialog reports the current state:
    - **BRG+RNG**: Submit bearing and range together; the overlay draws the bearing line and a narrow range arc.
    - **C/S** (**4D-model**): Enter course over ground (true) and speed over ground.
 
-In GPS lock, **BRG**, **RNG** and **BRG+RNG** only plot observations on the chart. In dead-reckoning mode they update the filter unless **draw only** is selected. **draw only** plots the bearing/range observation without applying it to the filter.
+In GPS lock, **BRG**, **RNG** and **BRG+RNG** only plot observations on the chart. In dead-reckoning mode they update the filter by default. The **update filter** setting is enabled by default; disable it to plot bearing/range observations on the chart without applying them to the filter.
 
 With **Show labels** enabled, plotted markers include their entry time, and bearing/range markers also show the entered values. The overlay retains up to 20 recent markers.
 
