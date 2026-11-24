@@ -90,15 +90,17 @@ export default async (api) => {
 
   let hasOverlay = false;
   let isRotated = false;
-  let boatpos = null;
-  let cogsog = null;
   let center = null;
+  let boatdata = null;
   const measurements = [];
 
   const KalmanOverlay = {
     name: "KalmanFilter",
     type: "map",
     storeKeys: {
+      pos: "nav.gps.position",
+      cog: "nav.gps.course",
+      sog: "nav.gps.speed",
       model: "nav.gps.kalman.model",
       LON: "nav.gps.kalman.LON",
       LAT: "nav.gps.kalman.LAT",
@@ -138,8 +140,11 @@ export default async (api) => {
       center = LonLat(...map.pixelToLonLat(w / 2, h / 2));
 
       if (data.LON == null && data.LAT == null) return;
-      boatpos = LonLat(data.LON, data.LAT);
-      cogsog = { cog: data.COG, sog: data.SOG };
+      boatdata = {
+        pos: data.pos ? LonLat(data.pos?.lon, data.pos?.lat) : null,
+        cog: data.cog,
+        sog: data.sog,
+      };
 
       const [px0, py0] = map.lonLatToPixel(center.lon, center.lat - 0.5 / 60);
       const [px1, py1] = map.lonLatToPixel(center.lon, center.lat + 0.5 / 60);
@@ -152,40 +157,39 @@ export default async (api) => {
       if (devmode) {
         let [cx, cy] = map.lonLatToPixel(center.lon, center.lat);
         ctx.beginPath();
-        ctx.arc(cx, cy, s * 10, 0, radians(360));
-        ctx.fillStyle = "blue";
-        ctx.globalAlpha = 0.5;
-        ctx.fill();
+        ctx.arc(cx, cy, s * 15, 0, radians(360));
+        ctx.strokeStyle = "blue";
+        ctx.globalAlpha = 0.9;
+        ctx.lineWidth = s * 2;
+        ctx.stroke();
       }
 
       for (const m of measurements) {
         const [bx, by] = map.lonLatToPixel(m.lon, m.lat);
-        // target marker
+        // marker
+        ctx.fillStyle = ctx.strokeStyle = m.color ?? "black";
+        ctx.lineWidth = s * (m.width ?? 2);
+        ctx.globalAlpha = m.alpha ?? 0.9;
         ctx.beginPath();
         ctx.arc(bx, by, s * 5, 0, radians(360));
-        ctx.fillStyle = "black";
-        ctx.globalAlpha = 0.9;
         ctx.fill();
         if (m.brg != null) {
           // bearing ling
           const brg = radians(m.brg + 180);
-          const d = m.rng * ppm;
+          const d = 1.1 * m.rng * ppm;
           const ex = bx + d * Math.sin(brg);
           const ey = by - d * Math.cos(brg);
           ctx.beginPath();
           ctx.moveTo(bx, by);
           ctx.lineTo(ex, ey);
-          ctx.strokeStyle = "black";
-          ctx.lineWidth = s * 2;
           ctx.stroke();
-        } else if (m.rng != null) {
+        }
+        if (m.rng != null && m.a != null && m.b != null) {
           // range circle
           ctx.beginPath();
           const a = m.a ?? 0;
           const b = m.b ?? 360;
           ctx.arc(bx, by, m.rng * ppm, radians(a - 90), radians(b - 90));
-          ctx.strokeStyle = "black";
-          ctx.lineWidth = s * 2;
           ctx.stroke();
         }
       }
@@ -285,26 +289,28 @@ export default async (api) => {
 
   async function showDialog(e) {
     const m = await fetch(modeUrl).then((r) => r.json());
-    log(m, center, boatpos);
-    const brg = round(boatpos?.initialBearingTo(center));
-    const rng = round(boatpos?.distanceTo(center) * nm, 2);
-    const cog = round(cogsog?.cog);
-    const sog = round(cogsog?.sog * kn, 1);
+    const obj = center; // freeze map center on dialog open
+    const boat = boatdata;
+    log(m, obj, boat);
+    const brg = round(boat?.pos?.initialBearingTo(obj));
+    const rng = round(boat?.pos?.distanceTo(obj) * nm, 2);
+    const cog = round(boat?.cog);
+    const sog = round(boat?.sog * kn, 1);
     const values = { brg, rng, cog, sog };
     const parameters = [];
-    if (m.mode > 1 && center != null && !isRotated) {
+    if (m.mode > 1 && obj != null && !isRotated) {
       parameters.push(
         {
           name: "brg",
           displayName: "BRG (T)",
-          description: "bearing to object at map center",
+          description: "bearing to object at map obj",
           type: "FLOAT",
           list: [0, 360],
         },
         {
           name: "rng",
           displayName: "RNG (nm)",
-          description: "range to object at map center",
+          description: "range to object at map obj",
           type: "FLOAT",
           list: [0, 100],
         },
@@ -330,6 +336,10 @@ export default async (api) => {
     }
 
     let text = "";
+    if (m.mode == 0) text += "Filter not initialized, provide a fix to start. ";
+    if (m.mode == 1)
+      text += "Locked to GPS, measurements will not affect the filter. ";
+    if (m.mode == 2) text += "Dead reckoning. ";
     if (!hasOverlay)
       text += "Add KalmanFilter map overlay to enable bearings and fixes! ";
     if (isRotated) text += "Disable map rotation for data input! ";
@@ -352,8 +362,8 @@ export default async (api) => {
             },
           },
           {
-            name: "delete",
-            icon: `${base}icons/delete.svg`,
+            name: "cleanup",
+            icon: `${base}icons/mop.svg`,
             shortText: "cleanup",
             visible: measurements.length > 0,
             onClick: (event, values, close) => {
@@ -373,10 +383,10 @@ export default async (api) => {
             name: "fix",
             icon: `${base}icons/gps.svg`,
             shortText: "FIX",
-            visible: m.mode != 1 && center != null && !isRotated,
+            visible: m.mode != 1 && obj != null && !isRotated,
             onClick: (event, values, close) => {
-              if (center != null) {
-                fetch(`${inputUrl}?LON=${center.lon}&LAT=${center.lat}`);
+              if (obj != null) {
+                fetch(`${inputUrl}?LON=${obj.lon}&LAT=${obj.lat}`);
               }
             },
           },
@@ -387,30 +397,42 @@ export default async (api) => {
             visible: m.mode > 1 && m.model == 4,
             disabled: () => !(isFinite(values.cog) && isFinite(values.sog)),
             onClick: (event, values, close) => {
-              fetch(`${inputUrl}?COG=${values.cog}&SOG=${values.sog / kn}`);
+              measurements.push({
+                lon: obj.lon,
+                lat: obj.lat,
+                rng: values.rng / nm,
+                //  arc around BRG instead of full circle
+                a: values.brg + 180 - 45,
+                b: values.brg + 180 + 45,
+                alpha: m.mode != 1 ? 1 : 0.5,
+              });
+              if (m.mode != 1) {
+                fetch(`${inputUrl}?COG=${values.cog}&SOG=${values.sog / kn}`);
+              }
             },
           },
           {
             name: "rng",
             icon: `${base}icons/range.svg`,
             shortText: "RNG",
-            visible: center != null && !isRotated,
+            visible: obj != null && !isRotated,
             disabled: () => !isFinite(values.rng),
             onClick: (event, values, close) => {
               measurements.push({
-                lon: center.lon,
-                lat: center.lat,
+                lon: obj.lon,
+                lat: obj.lat,
                 rng: values.rng / nm,
                 //  arc around BRG instead of full circle
                 a: values.brg + 180 - 45,
                 b: values.brg + 180 + 45,
+                alpha: m.mode > 1 ? 1 : 0.5,
               });
               if (measurements.length > 20) {
                 measurements.splice(0, measurements.length - 20);
               }
               if (m.mode > 1) {
                 fetch(
-                  `${inputUrl}?BLON=${center.lon}&BLAT=${center.lat}&RNG=${values.rng / nm}`,
+                  `${inputUrl}?BLON=${obj.lon}&BLAT=${obj.lat}&RNG=${values.rng / nm}`,
                 );
               }
             },
@@ -419,21 +441,48 @@ export default async (api) => {
             name: "brg",
             icon: `${base}icons/compass.svg`,
             shortText: "BRG",
-            visible: center != null && !isRotated,
+            visible: obj != null && !isRotated,
             disabled: () => !isFinite(values.brg),
             onClick: (event, values, close) => {
               measurements.push({
-                lon: center.lon,
-                lat: center.lat,
+                lon: obj.lon,
+                lat: obj.lat,
                 brg: values.brg,
-                rng: 2 * (boatpos?.distanceTo(center) ?? 5000),
+                rng: 2 * (boat?.pos?.distanceTo(obj) ?? 5000),
+                alpha: m.mode > 1 ? 1 : 0.5,
               });
               if (measurements.length > 20) {
                 measurements.splice(0, measurements.length - 20);
               }
               if (m.mode > 1) {
                 fetch(
-                  `${inputUrl}?BLON=${center.lon}&BLAT=${center.lat}&BRG=${values.brg}`,
+                  `${inputUrl}?BLON=${obj.lon}&BLAT=${obj.lat}&BRG=${values.brg}`,
+                );
+              }
+            },
+          },
+          {
+            name: "brgrng",
+            icon: `${base}icons/radar.svg`,
+            shortText: "BRG+RNG",
+            visible: obj != null && !isRotated,
+            disabled: () => !isFinite(values.brg) || !isFinite(values.rng),
+            onClick: (event, values, close) => {
+              measurements.push({
+                lon: obj.lon,
+                lat: obj.lat,
+                brg: values.brg,
+                rng: values.rng / nm,
+                a: values.brg + 180 - 5,
+                b: values.brg + 180 + 5,
+                alpha: m.mode > 1 ? 1 : 0.5,
+              });
+              if (measurements.length > 20) {
+                measurements.splice(0, measurements.length - 20);
+              }
+              if (m.mode > 1) {
+                fetch(
+                  `${inputUrl}?BLON=${obj.lon}&BLAT=${obj.lat}&BRG=${values.brg}&RNG=${values.rng / nm}`,
                 );
               }
             },
