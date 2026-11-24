@@ -311,7 +311,7 @@ class Plugin:
         qw = self.config[NOISE_W] / 1000 if self.config[USE_LOG] else 0
         self.boat = boat = kalman.Boat(qv, qw)  # the actual kalman filter
         self.start = datetime.utcnow()
-        t0, values0 = self.monotonic(), {}  # last values
+        values0 = {}  # last values
         # scale and offset for cartesian tanget plane coordinates, boat starts at [0,0] meters
         b0, x0, y0, scale = 0, 0, 0, 1
 
@@ -332,7 +332,8 @@ class Plugin:
         while not self.api.shouldStopMainThread():
             if self.config_changed or self.reset:
                 break
-            t1 = self.monotonic()
+
+            t1 = monotonic()
 
             values1 = {}  # new input values
             for k, p in INPUT_FIELDS.items():
@@ -342,9 +343,7 @@ class Plugin:
                     continue  # skip invalid
                 if v0 and v0.timestamp >= v1.timestamp:
                     continue  # must be a new value with different timestamp
-                age = (
-                    monotonic() - v1.timestamp
-                )  # plain monotonic here because timestamp is not sped up
+                age = monotonic() - v1.timestamp
                 if 0 <= age < 2 * self.config[INTERVAL]:  # must be recent
                     values1[k] = v1
                     # log(k, v1.value, v1.source, age)
@@ -387,7 +386,7 @@ class Plugin:
                 # values1.update(self.input)  # merge
 
             if mode > Mode.OFF:
-                dt = max(0, t1 - b0 - boat.t)
+                dt = max(0, self.monotonic() - b0 - boat.t)
                 boat.predict(dt)
                 log("[green]predict dt", dt, "t", boat.t)
 
@@ -399,7 +398,7 @@ class Plugin:
                 if abs(scale - s) > 1e-3:
                     scale = s  # update scale and offset
                     x0, y0 = kalman.to_webmercator(lon, lat)
-                    b0 = t1
+                    b0 = self.monotonic()
                     boat.t = 0
                     boat.x[:2] = 0, 0
                     boat.predict(1)  # initialize (also avoids singluar matrix)
@@ -518,5 +517,4 @@ class Plugin:
                 "NMEA",
                 f"model:{boat.n} mode:{mode} input:{input} updated:{updated} NMEA:{nmea}",
             )
-            t0 = t1
-            sleep(max(0, self.config[INTERVAL] - (self.monotonic() - t1)))
+            sleep(max(0, self.config[INTERVAL] - (monotonic() - t1)))
