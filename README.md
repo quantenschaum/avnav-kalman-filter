@@ -4,35 +4,85 @@ The Kalman Filter plugin estimates the boat's position, course and speed. It use
 
 ![AvNav](avnav.png)
 
-## Models
+## Models and estimates
 
 Choose the model with **Use log and compass** in the plugin settings:
 
-- **Manual** (off): Uses position and ground velocity. You can enter a fix and update course and speed from the chart dialog; no log or compass is required.
-- **Log and compass** (on): Uses water speed from the log and heading from the compass, and estimates current as well as position. In dead-reckoning mode, chart fixes, bearings and ranges help correct the estimate. The compass needs to supply true heading.
+- **Manual** (off, 4D): Uses position and ground velocity. You can enter a fix and update course and speed from the chart dialog; no log or compass is required.
+- **Log and compass** (on, 6D): Uses water speed from the log and heading from the compass, and estimates current as well as position. In dead-reckoning mode, chart fixes, bearings and ranges help correct the estimate. The compass needs to supply true heading.
 
 The displayed current (**SET/DFT**) is inferred from the difference between ground motion (COG/SOG, inferred from absolute references such as GPS position fixes and charted-object bearings/ranges) and water motion (heading/speed from the compass/log). It is a residual estimate, not a direct current measurement: it can include actual current as well as leeway and sensor or model offsets and errors.
 
-Both models can use GPS input. The **GPS off** button simulates lost GPS for testing by withholding GPS position and ground course/speed from the filter. Log and compass input, if selected, continues to be used.
-
-## Install and configure
+## Install
 
 1. Upload the plugin ZIP from AvNav's **Plugins** page. NumPy must be installed in AvNav's Python environment.
-2. Configure the plugin in its settings. **Use log and compass** selects the model. **Log fail** sets a water-speed threshold in knots for detecting a failed log: when the log reports zero while the filter's estimated water speed exceeds this threshold, the zero reading is ignored. Set it to `0` to disable detection. **Noise V** controls process noise for motion; in log-and-compass mode, **Noise W** controls process noise for the estimated current. Larger values let the estimate adapt faster but increase its uncertainty. **Position**, **Speed**, **Course**, **Bearing** and **Range error** are the assumed measurement errors (position/range in metres, speed in knots, and course/bearing in degrees); adjust them to suit your sensors and observations. **Interval** sets the filter loop interval. **Speedup** accelerates the filter's clock for simulation and testing; leave it at `1` for normal use. **Talker ID** and **Priority** configure the talker prefix and priority of generated NMEA sentences.
-3. Add the **KalmanFilter** map overlay: **Layout → Edit → On map → Add KalmanFilter**. It shows the estimated position and covariance ellipse, and provides the chart context for fixes, bearings and ranges. Disable map rotation before entering chart-based data; these controls are unavailable while the map is rotated ([#718](https://github.com/wellenvogel/avnav/issues/718)).
-4. In the overlay settings, choose the ellipse confidence level (0–100%; set it to `0` to hide the ellipse) and color. **Show labels** toggles annotations on plotted observations (on by default). **COG vector** toggles the ground-velocity vector; **DFT vector** toggles the estimated current vector.
+2. Add the **KalmanFilter** map overlay: **Layout → Edit → On map → Add KalmanFilter**. The overlay provides the chart context for fixes, bearings and ranges.
+3. Disable map rotation before entering chart-based data. These controls are unavailable while the map is rotated ([#718](https://github.com/wellenvogel/avnav/issues/718)).
 
-Keep the NMEA output priority below that of your real GPS source so the estimate does not take precedence over GPS data. When in dead-reckoning mode the filter outputs an RMC sentence, including in the manual (4D) model. In the log-and-compass model it also outputs a VDR sentence for estimated current. NMEA output is suppressed when **GPS off** is selected. For backend diagnostic logging, set the plugin process environment variable `DEV=1`; output is suppressed by default.
+## Configure
+
+### Plugin settings
+
+- **Use log and compass**: Selects the 4D manual model or 6D log-and-compass model.
+- **Log fail**: Sets a water-speed threshold in knots for detecting a failed log. When the log reports zero while the filter's estimated water speed exceeds this threshold, the zero reading is ignored. Set to `0` to disable detection.
+- **Noise V**: Controls process noise for motion. Larger values let the estimate adapt faster but increase uncertainty.
+- **Noise W**: In log-and-compass mode, controls process noise for the estimated current. Larger values let the estimate adapt faster but increase uncertainty.
+- **Measurement errors**: Set the assumed errors to suit your instruments and observations:
+  - **Position** and **Range error**: metres.
+  - **Speed**: knots.
+  - **Course** and **Bearing**: degrees.
+- **Interval**: Sets the filter loop interval.
+- **Speedup**: Accelerates the filter's clock for simulation and testing; leave at `1` for normal use.
+- **Talker ID** and **Priority**: Set the NMEA talker prefix and source priority.
+
+### Map overlay settings
+
+- **Confidence level**: Sets the covariance ellipse confidence from 0–100%; set it to `0` to hide the ellipse.
+- **Overlay color**: Sets the color of the estimate and graphics.
+- **Show labels**: Toggles labels on plotted observations; on by default.
+- **COG vector**: Toggles the ground-velocity vector.
+- **DFT vector**: Toggles the estimated current vector.
+
+### NMEA output and diagnostics
+
+Keep the NMEA output priority below that of your real GPS source so the estimate does not take precedence over GPS data.
+
+- In dead-reckoning mode, the filter outputs an RMC sentence, including in the manual (4D) model.
+- In the log-and-compass model, it also outputs a VDR sentence for estimated current.
+- NMEA output is suppressed when **GPS off** is selected.
+- For backend diagnostic logging, set the plugin process environment variable `DEV=1`; output is suppressed by default.
 
 ## Use
 
 The plugin publishes its estimate under `gps.kalman.*`, which you can use in AvNav widgets.
 
-Click **KF** on the chart to open the controls. The chart center is captured when the dialog opens, so center the charted object first. When the center is usable, bearing and range fields are available in both GPS lock and dead-reckoning mode. In GPS lock, **BRG**, **RNG** and **BRG+RNG** only plot observations on the chart; they do not change the filter's estimate. In dead-reckoning mode, they update the filter by default. Select **draw only** to plot them without updating the filter; this option is available only in dead-reckoning mode. You can also:
+### Check the filter state
 
-- **Fix**: use the chart center as the boat's observed position (for example, when close to a buoy or other known object). This is available before initialization and in dead-reckoning mode, but not while locked to GPS. A marker is drawn at the fix location.
-- **C/S** (manual model): enter course over ground (true) and speed over ground.
+The **KF** dialog reports the current state:
 
-The bearing and range fields are prefilled with the estimate from the boat to the chart center when a position is available. To take a bearing, place the charted object at the center, open **KF**, enter the true bearing you measured, then press **BRG**. To enter a range, place the object at the center, enter the measured range and press **RNG**; the overlay draws a range arc around the prefilled bearing. **BRG+RNG** submits both measurements together and plots their bearing line and a narrow range arc. In dead-reckoning mode, successive bearings can be used for cross-bearings or running fixes. With **Show labels** enabled, plotted markers include their entry time, and bearing/range markers also show the entered values. The overlay retains up to 20 recent markers.
+- **Uninitialized**: Provide a position fix to start the filter.
+- **Locked to GPS**: Chart measurements are plotted but do not affect the estimate.
+- **Dead reckoning**: Chart observations update the estimate by default.
 
-The dialog indicates whether the filter is uninitialized (provide a fix), locked to GPS (observations will not affect the estimate), or dead reckoning. **GPS off** simulates GPS loss by withholding GPS position and ground course/speed; log and compass data continue to be used if selected. **Reset** restarts the filter and clears plotted markers. **Cleanup** clears the observation markers from the overlay, but does not undo observations already incorporated by the filter.
+**GPS off** simulates GPS loss by withholding GPS position and ground course/speed from the filter. Log and compass input, if selected, continues to be used.
+
+### Enter chart observations
+
+1. Add the **KalmanFilter** overlay and disable map rotation.
+2. Center the charted object before opening **KF**. The chart center is captured when the dialog opens.
+3. When the center is usable, bearing and range fields are available in GPS-lock and dead-reckoning modes. They are prefilled with the estimated bearing and range from the boat to the chart center when a position estimate is available.
+4. Choose an action:
+   - **Fix**: Uses the chart center as the boat's observed position, for example when close to a buoy or other known object. Available before initialization and in dead-reckoning mode, but not while locked to GPS; a marker is drawn at the fix location.
+   - **BRG**: Enter the true bearing to the centered object and submit it. In dead-reckoning mode this bearing is used as a filter observation; successive bearings can be used for cross-bearings or running fixes.
+   - **RNG**: Enter the measured range and submit it. The overlay draws a range arc around the prefilled bearing.
+   - **BRG+RNG**: Submit bearing and range together; the overlay draws the bearing line and a narrow range arc.
+   - **C/S** (manual model): Enter course over ground (true) and speed over ground.
+
+In GPS lock, **BRG**, **RNG** and **BRG+RNG** only plot observations on the chart. In dead-reckoning mode they update the filter unless **draw only** is selected. **draw only** plots the bearing/range observation without applying it to the filter.
+
+With **Show labels** enabled, plotted markers include their entry time, and bearing/range markers also show the entered values. The overlay retains up to 20 recent markers.
+
+### Reset and clear markers
+
+- **Reset** restarts the filter and clears plotted markers.
+- **Cleanup** clears observation markers from the overlay; it does not undo observations already incorporated by the filter.
