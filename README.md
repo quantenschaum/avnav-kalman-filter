@@ -72,9 +72,9 @@ The **KF** button icon indicates the filter's current mode, and the **KF** dialo
 
 ### Enter chart observations
 
-1. Add the **KalmanFilter** overlay.
-2. Center the charted object before opening **KF**. The chart center is captured when the dialog opens.
-3. Bearing and range fields are available in GPS-lock and dead-reckoning modes. They are prefilled with the bearing and range from AvNav’s current boat position to the chart center when that position is available. If magnetic variation is available, the dialog also offers a **magnetic** checkbox and pre-fills the bearing as magnetic; otherwise bearings are true.
+1. Center the chart on a known reference object, such as a beacon or lighthouse.
+2. Click the **KF** button to open the dialog. The chart center is captured when the dialog opens.
+3. Bearing and range fields are available in GPS-lock and dead-reckoning modes. They are prefilled with the bearing and range from AvNav’s current boat position to the chart center. If magnetic variation is available, the dialog also offers a **magnetic** checkbox and pre-fills the bearing as magnetic; otherwise bearings are true.
 4. Choose an action:
    - ![Fix icon](icons/gps.svg) **Fix**: Uses the chart center as the boat's observed position, for example when close to a buoy or other known object. Available before initialization, in GPS lock, and in dead-reckoning mode. With **update filter** enabled, the fix is submitted to the filter; otherwise it is only plotted.
    - ![BRG icon](icons/compass.svg) **BRG**: Enter the bearing to the centered object. Select **magnetic** for a magnetic bearing; when **update filter** is enabled, the plugin converts it to true before submission. When enabled, the bearing is submitted as a filter observation; otherwise it is only plotted. Successive bearings can be used for cross-bearings or running fixes.

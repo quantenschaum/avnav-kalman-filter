@@ -208,32 +208,6 @@ export default async (api) => {
         const [tx, ty] = map.lonLatToPixel(data.LON, data.LAT);
         ctx.translate(tx, ty);
 
-        if (data.marker == "boat") {
-          ctx.save();
-          ctx.rotate(radians(data.CTW ?? data.COG));
-          ctx.beginPath();
-          ctx.moveTo(0, -s * 30);
-          ctx.lineTo(-s * 10, s * 10);
-          ctx.lineTo(s * 10, s * 10);
-          ctx.closePath();
-          ctx.lineWidth = 1.5 * s;
-          ctx.strokeStyle = "black";
-          ctx.fillStyle = data.color;
-          ctx.globalAlpha = 0.6;
-          ctx.fill();
-          ctx.stroke();
-          ctx.restore();
-        } else if (data.marker == "circle") {
-          ctx.beginPath();
-          ctx.arc(0, 0, s * 8, 0, radians(360));
-          ctx.lineWidth = 1.5 * s;
-          ctx.strokeStyle = "black";
-          ctx.fillStyle = data.color;
-          ctx.globalAlpha = 0.6;
-          ctx.fill();
-          ctx.stroke();
-        }
-
         const P = [
           [data.Pxx, data.Pxy],
           [data.Pxy, data.Pyy],
@@ -260,6 +234,7 @@ export default async (api) => {
           if (crs == null || spd == null) return;
           crs = radians(crs);
           spd *= data.cvt * ppm;
+          ctx.save();
           ctx.beginPath();
           ctx.moveTo(0, 0);
           ctx.lineTo(Math.sin(crs) * spd, -Math.cos(crs) * spd);
@@ -268,6 +243,7 @@ export default async (api) => {
           ctx.setLineDash(dash);
           ctx.globalAlpha = 0.8;
           ctx.stroke();
+          ctx.restore();
         }
 
         if (data.show_cog) {
@@ -278,6 +254,32 @@ export default async (api) => {
         }
         if (data.show_dft) {
           speedvector(data.SET, data.DFT, [s * 2, s * 2]);
+        }
+
+        if (data.marker == "boat") {
+          ctx.save();
+          ctx.rotate(radians(data.CTW ?? data.COG));
+          ctx.beginPath();
+          ctx.moveTo(0, -s * 30);
+          ctx.lineTo(-s * 10, s * 10);
+          ctx.lineTo(s * 10, s * 10);
+          ctx.closePath();
+          ctx.lineWidth = 1.5 * s;
+          ctx.strokeStyle = "black";
+          ctx.fillStyle = data.color;
+          ctx.globalAlpha = 0.8;
+          ctx.fill();
+          ctx.stroke();
+          ctx.restore();
+        } else if (data.marker == "circle") {
+          ctx.beginPath();
+          ctx.arc(0, 0, s * 8, 0, radians(360));
+          ctx.lineWidth = 1.5 * s;
+          ctx.strokeStyle = "black";
+          ctx.fillStyle = data.color;
+          ctx.globalAlpha = 0.8;
+          ctx.fill();
+          ctx.stroke();
         }
       } finally {
         ctx.restore();
@@ -404,8 +406,10 @@ export default async (api) => {
 
     let text = "";
     if (m.mode < 1) text += "Filter not initialized, provide a fix to start. ";
-    if (m.mode == 1) text += "Locked to GPS ";
-    if (m.mode > 1) text += `Dead reckoning (${m.model}D) `;
+    if (m.mode == 1) text += "Locked to GPS. ";
+    if (m.mode > 1) text += `Dead reckoning (${m.model}D). `;
+    if (values.magnetic)
+      text += `Variation: ${magvar > 0 ? "E" : "W"} ${Math.abs(magvar).toFixed(1)}° `;
 
     function time() {
       const t = api.getStoreData("nav.gps.rtime", new Date());
