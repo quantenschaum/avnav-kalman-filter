@@ -32,6 +32,7 @@ NOISE_W = "noise_w"
 TALKER_ID = "talker_id"
 PRIORITY = "priority"
 SPEEDUP = "speedup"
+HDOP_SCALE = "hdop_scale"
 SPD_ERROR = "spd_error"
 CRS_ERROR = "crs_error"
 POS_ERROR = "pos_error"
@@ -79,6 +80,12 @@ CONFIG = [
         "type": "FLOAT",
         "default": 5,
         "rangeOrList": [0.5, 500],
+    },
+    {
+        "name": HDOP_SCALE,
+        "description": "scale position error with hdop if available",
+        "type": "BOOLEAN",
+        "default": True,
     },
     {
         "name": SPD_ERROR,
@@ -131,6 +138,10 @@ CONFIG = [
 ]
 
 INPUT_FIELDS = {
+    "FIX": "gps.fixType",
+    "QUAL": "gps.fixQuality",
+    "SATS": "gps.satUsed",
+    "HDOP": "gps.HDOP",
     "LAT": "gps.lat",
     "LON": "gps.lon",
     "COG": "gps.track",
@@ -344,6 +355,15 @@ class Plugin:
                 if 0 <= age < 2 * self.config[INTERVAL]:  # must be recent
                     values1[k] = v1
                     # log(k, v1.value, v1.source, age)
+                    #
+
+            gps = {}
+            for k in ["FIX", "QUAL", "SATS", "HDOP"]:
+                if k in values0:
+                    gps[k] = values0[k].value
+                if k in values1:
+                    gps[k] = values1[k].value
+            log(gps)
 
             if not self.use_gps:
                 log("[blue]GPS off")
@@ -362,7 +382,8 @@ class Plugin:
                 if boat.n > 4
                 else Mode.DRM
             )
-            log(mode, boat.n, input)
+            log("mode", mode, boat.n)
+            log(input)
 
             slog = self.config[LOG_FAIL] / KN
             if (
@@ -398,8 +419,14 @@ class Plugin:
                     # mode = Mode.GPS
                     log("[red]scale", scale, "offset", x0, y0)
                 x, y = toGrid(lon, lat)
-                log("[yellow]pos", x, y)
-                boat.measure_position(x, y, self.config[POS_ERROR])
+                hdop = (
+                    gps.get("HDOP", 1)
+                    if self.config[HDOP_SCALE] and not self.input
+                    else 1
+                )
+                error = hdop * self.config[POS_ERROR]
+                log("[yellow]pos", x, y, error)
+                boat.measure_position(x, y, error)
                 updated.append("POS")
 
             if mode > Mode.OFF:
@@ -442,7 +469,6 @@ class Plugin:
                 lon, lat = toLL(*boat.pos)
                 data.update(
                     {
-                        "upd": ",".join(updated),
                         "time": boat.t,
                         "Pxx": boat.P[0, 0],
                         "Pyy": boat.P[1, 1],
@@ -513,6 +539,6 @@ class Plugin:
 
             self.api.setStatus(
                 "NMEA",
-                f"model:{boat.n} mode:{mode} input:{input} updated:{updated} NMEA:{nmea}",
+                f"model:{boat.n}D mode:{mode} gps:{gps} input:{input} updated:{updated} NMEA:{nmea}",
             )
             sleep(max(0, self.config[INTERVAL] - (monotonic() - t1)))

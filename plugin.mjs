@@ -128,7 +128,8 @@ export default async (api) => {
       // log(api.getBaseUrl());
       // console.log(api.getStoreBaseKey());
       // console.log(api.getStoreData());
-      if (data.LON == null && data.LAT == null) return;
+      if (data?.center == null) return;
+      if (data?.LON == null || data?.LAT == null) return;
       const s = map.getScale();
       const r = map.getRotation();
       const center = data.center;
@@ -282,7 +283,7 @@ export default async (api) => {
     show_cog: {
       displayName: "COG vector",
       type: "BOOLEAN",
-      default: true,
+      default: false,
       description: "display COG/SOG ground speed vector (solid line)",
     },
     show_ctw: {
@@ -294,7 +295,7 @@ export default async (api) => {
     show_dft: {
       displayName: "DFT vector",
       type: "BOOLEAN",
-      default: true,
+      default: false,
       description: "display SET/DFT current vector (dotted line)",
     },
     labels: {
@@ -511,7 +512,7 @@ export default async (api) => {
                 lon: center.lon,
                 lat: center.lat,
                 brg,
-                rng: 2 * (pos?.distanceTo(center) ?? 5000),
+                rng: 1.5 * (pos?.distanceTo(center) ?? 5000),
                 alpha: vals.update ? 1 : 0.5,
                 label: `${vals.brg.toFixed(0)}°${vals.magnetic ? "M" : "T"} ${time()}`,
               });

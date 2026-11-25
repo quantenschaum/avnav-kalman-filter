@@ -30,6 +30,7 @@ The displayed current (**SET/DFT**) is inferred from the difference between grou
   - **Position** and **Range error**: metres.
   - **Speed**: knots.
   - **Course** and **Bearing**: degrees.
+- **Scale position error with HDOP**: When enabled (default), scales the configured position measurement error by GPS HDOP for incoming GPS positions. For example, a base position error of 5m with HDOP 2 is treated as 10m. If HDOP is unavailable, the base error is used. This setting does not scale chart observations or manually injected positions.
 - **Interval**: Sets the filter loop interval.
 - **Speedup**: Accelerates the filter's clock for simulation and testing; leave at `1` for normal use.
 - **Talker ID** and **Priority**: Set the NMEA talker prefix and source priority.
@@ -39,9 +40,9 @@ The displayed current (**SET/DFT**) is inferred from the difference between grou
 - **Confidence level**: Sets the covariance ellipse confidence from 0–100%; set it to `0` to hide the ellipse.
 - **Overlay color**: Sets the color of the estimate and graphics.
 - **Show labels**: Toggles labels on plotted observations; on by default.
-- **COG vector**: Toggles the ground-velocity vector; on by default.
+- **COG vector**: Toggles the ground-velocity vector; off by default.
 - **CTW vector**: Toggles the water-velocity vector; off by default.
-- **DFT vector**: Toggles the estimated current vector; on by default.
+- **DFT vector**: Toggles the estimated current vector; off by default.
 
 ### NMEA output and diagnostics
 
@@ -50,6 +51,7 @@ Normally, keep the NMEA output priority below that of your real GPS source so th
 - In dead-reckoning mode, the filter outputs an RMC sentence, including in the **4D-model**.
 - In the **6D-model**, it also outputs a VDR sentence for estimated current.
 - **GPS off** withholds GPS position and ground course/speed from the filter.
+- The plugin's **NMEA** status includes the model and mode, recent GPS fix metadata (fix type/quality, satellites, HDOP), input data, updated measurements and emitted sentence types.
 - For backend diagnostic logging, set the plugin process environment variable `DEV=1`; output is suppressed by default.
 
 ## Use
