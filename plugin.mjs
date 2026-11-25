@@ -87,11 +87,6 @@ export default async (api) => {
   const modeUrl = base + "api/mode";
   const inputUrl = base + "api/input";
 
-  let hasOverlay = false;
-  let isRotated = false;
-  let rtime = null;
-  let center = null;
-  let boatdata = null;
   const measurements = [];
 
   const KalmanOverlay = {
@@ -116,13 +111,11 @@ export default async (api) => {
       DFT: "nav.gps.kalman.DFT",
       model: "nav.gps.kalman.model",
       cvt: "properties.navBoatCourseTime",
+      center: "map.centerPosition",
+      fontsize: "properties.baseFontSize",
     },
-    initFunction: function (map, data) {
-      hasOverlay = true;
-    },
-    finalizeFunction: function () {
-      hasOverlay = false;
-    },
+    initFunction: function (map, data) {},
+    finalizeFunction: function () {},
     renderCanvas: function (canvas, data, map) {
       // log(canvas);
       // log(data);
@@ -134,161 +127,140 @@ export default async (api) => {
       // log(api.getBaseUrl());
       // console.log(api.getStoreBaseKey());
       // console.log(api.getStoreData());
+      if (data.LON == null && data.LAT == null) return;
       const s = map.getScale();
       const r = map.getRotation();
-      isRotated = r != 0;
-      let [w, h] = map.getDimensions();
-      if (avnavVersion < 20261124) {
-        [w, h] = [w / s, w / s];
-      }
-      center = LonLat(...map.pixelToLonLat(w / 2, h / 2));
-
-      if (data.LON == null && data.LAT == null) return;
-      rtime = data.rtime;
-      boatdata = {
-        rtime: data.rtime,
-        var: data.var,
-        pos: data.pos ? LonLat(data.pos?.lon, data.pos?.lat) : null,
-        cog: data.cog,
-        sog: data.sog,
-      };
-
+      const center = data.center;
       const [px0, py0] = map.lonLatToPixel(center.lon, center.lat - 0.5 / 60);
       const [px1, py1] = map.lonLatToPixel(center.lon, center.lat + 0.5 / 60);
       const ppm = Math.hypot(px1 - px0, py1 - py0) / 1852;
       // log("ppm", ppm);
 
       const ctx = map.getContext();
-      ctx.save();
-
-      if (devmode) {
-        let [cx, cy] = map.lonLatToPixel(center.lon, center.lat);
-        ctx.beginPath();
-        ctx.arc(cx, cy, s * 15, 0, radians(360));
-        ctx.strokeStyle = "blue";
-        ctx.globalAlpha = 0.9;
-        ctx.lineWidth = s * 2;
-        ctx.stroke();
-      }
-
-      if (measurements.length > 20) measurements.shift();
-      function label(text, x, y, rot = 0) {
-        if (text == null || !data.labels) return;
+      try {
         ctx.save();
-        ctx.translate(x, y);
-        ctx.rotate(radians(rot));
-        ctx.font = `${s * 20}px Roboto, Arial, sans-serif`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "bottom";
-        ctx.fillText(text, 0, 0);
-        ctx.restore();
-      }
-      for (const m of measurements) {
-        const [bx, by] = map.lonLatToPixel(m.lon, m.lat);
-        // marker
-        ctx.fillStyle = ctx.strokeStyle = m.color ?? "black";
-        ctx.lineWidth = s * (m.width ?? 2);
-        ctx.globalAlpha = m.alpha ?? 0.9;
-        ctx.beginPath();
-        ctx.arc(bx, by, s * 5, 0, radians(360));
-        ctx.fill();
 
-        if (m.brg == null && m.rng == null) {
-          // fix marker
-          ctx.beginPath();
-          ctx.arc(bx, by, s * 10, 0, radians(360));
-          ctx.stroke();
-          label(m.label, bx, by - s * 10);
+        if (measurements.length > 20) measurements.shift();
+        function label(text, x, y, rot = 0, dx = 0, dy = 0) {
+          if (text == null || !data.labels) return;
+          ctx.save();
+          ctx.translate(x, y);
+          if (Math.abs(to180(rot + degrees(r))) > 90) rot += 180; // keep upright
+          ctx.rotate(radians(rot));
+          ctx.translate(dx, dy);
+          ctx.font = `${s * data.fontsize}px Roboto, Arial, sans-serif`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "bottom";
+          ctx.fillText(text, 0, 0);
+          ctx.restore();
         }
-        if (m.brg != null) {
-          // bearing line
-          const brg = radians(m.brg + 180);
-          const d = 1.1 * m.rng * ppm;
-          const ex = bx + d * Math.sin(brg);
-          const ey = by - d * Math.cos(brg);
+        for (const m of measurements) {
+          const [bx, by] = map.lonLatToPixel(m.lon, m.lat);
+          // marker
+          ctx.fillStyle = ctx.strokeStyle = m.color ?? "black";
+          ctx.lineWidth = s * (m.width ?? 2);
+          ctx.globalAlpha = m.alpha ?? 0.9;
           ctx.beginPath();
-          ctx.moveTo(bx, by);
-          ctx.lineTo(ex, ey);
-          ctx.stroke();
-          const a = to180(m.brg);
-          const b = Math.sign(a) * 90;
-          label(m.label, (bx + ex) / 2, (by + ey) / 2, a - b);
-        }
-        if (m.rng != null && m.a != null && m.b != null) {
-          // range circle
-          ctx.beginPath();
-          const a = m.a ?? 0;
-          const b = m.b ?? 360;
-          ctx.arc(bx, by, m.rng * ppm, radians(a - 90), radians(b - 90));
-          ctx.stroke();
-          if (m.brg == null) {
-            const a = to180(m.a + to180(m.b - m.a) / 2);
-            const b = Math.abs(a) > 90 ? 180 : 0;
-            const d = m.rng * ppm;
-            const x = bx + d * Math.sin(radians(a));
-            const y = by - d * Math.cos(radians(a));
-            label(m.label, x, y, a + b);
+          ctx.arc(bx, by, s * 5, 0, radians(360));
+          ctx.fill();
+
+          if (m.brg == null && m.rng == null) {
+            // fix marker
+            ctx.beginPath();
+            ctx.arc(bx, by, s * 10, 0, radians(360));
+            ctx.stroke();
+            label(m.label, bx, by, degrees(-r), 0, -s * 10);
+          }
+          if (m.brg != null) {
+            // bearing line
+            const brg = radians(m.brg + 180);
+            const d = 1.1 * m.rng * ppm;
+            const ex = bx + d * Math.sin(brg);
+            const ey = by - d * Math.cos(brg);
+            ctx.beginPath();
+            ctx.moveTo(bx, by);
+            ctx.lineTo(ex, ey);
+            ctx.stroke();
+            const a = to180(m.brg);
+            const b = Math.sign(a) * 90;
+            label(m.label, (bx + ex) / 2, (by + ey) / 2, a - b);
+          }
+          if (m.rng != null && m.a != null && m.b != null) {
+            // range circle
+            ctx.beginPath();
+            const a = m.a ?? 0;
+            const b = m.b ?? 360;
+            ctx.arc(bx, by, m.rng * ppm, radians(a - 90), radians(b - 90));
+            ctx.stroke();
+            if (m.brg == null) {
+              const a = to180(m.a + to180(m.b - m.a) / 2);
+              const b = Math.abs(a) > 90 ? 180 : 0;
+              const d = m.rng * ppm;
+              const x = bx + d * Math.sin(radians(a));
+              const y = by - d * Math.cos(radians(a));
+              label(m.label, x, y, a + b);
+            }
           }
         }
-      }
 
-      const [tx, ty] = map.lonLatToPixel(data.LON, data.LAT);
-      ctx.translate(tx, ty);
+        const [tx, ty] = map.lonLatToPixel(data.LON, data.LAT);
+        ctx.translate(tx, ty);
 
-      // position marker
-      ctx.beginPath();
-      ctx.arc(0, 0, s * 5, 0, radians(360));
-      ctx.fillStyle = data.color;
-      ctx.globalAlpha = 0.8;
-      ctx.fill();
-
-      const P = [
-        [data.Pxx, data.Pxy],
-        [data.Pxy, data.Pyy],
-      ];
-      const p = [data.confidence];
-      if (p > 0) {
-        const [xs, ys] = covEllipse([0, 0], P, p / 100, 128);
+        // position marker
         ctx.beginPath();
-        ctx.moveTo(xs[0] * ppm, ys[0] * ppm);
-        for (let i = 1; i < xs.length; i++) {
-          ctx.lineTo(xs[i] * ppm, ys[i] * ppm);
-        }
-        ctx.closePath();
+        ctx.arc(0, 0, s * 5, 0, radians(360));
         ctx.fillStyle = data.color;
-        ctx.globalAlpha = 0.1;
+        ctx.globalAlpha = 0.8;
         ctx.fill();
-        ctx.strokeStyle = data.color;
-        ctx.lineWidth = s * 2;
-        ctx.globalAlpha = 0.8;
-        ctx.stroke();
-      }
 
-      function speedvector(crs, spd, dash = []) {
-        if (crs == null || spd == null) return;
-        crs = radians(crs);
-        spd *= data.cvt * ppm;
-        ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.lineTo(Math.sin(crs) * spd, -Math.cos(crs) * spd);
-        ctx.lineWidth = s * 2;
-        ctx.strokeStyle = data.color;
-        ctx.setLineDash(dash);
-        ctx.globalAlpha = 0.8;
-        ctx.stroke();
-      }
+        const P = [
+          [data.Pxx, data.Pxy],
+          [data.Pxy, data.Pyy],
+        ];
+        const p = [data.confidence];
+        if (p > 0) {
+          const [xs, ys] = covEllipse([0, 0], P, p / 100, 128);
+          ctx.beginPath();
+          ctx.moveTo(xs[0] * ppm, ys[0] * ppm);
+          for (let i = 1; i < xs.length; i++) {
+            ctx.lineTo(xs[i] * ppm, ys[i] * ppm);
+          }
+          ctx.closePath();
+          ctx.fillStyle = data.color;
+          ctx.globalAlpha = 0.1;
+          ctx.fill();
+          ctx.strokeStyle = data.color;
+          ctx.lineWidth = s * 2;
+          ctx.globalAlpha = 0.8;
+          ctx.stroke();
+        }
 
-      if (data.show_cog) {
-        speedvector(data.COG, data.SOG);
-      }
-      if (data.show_ctw) {
-        speedvector(data.CTW, data.STW, [s * 6, s * 6]);
-      }
-      if (data.show_dft) {
-        speedvector(data.SET, data.DFT, [s * 2, s * 2]);
-      }
+        function speedvector(crs, spd, dash = []) {
+          if (crs == null || spd == null) return;
+          crs = radians(crs);
+          spd *= data.cvt * ppm;
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.lineTo(Math.sin(crs) * spd, -Math.cos(crs) * spd);
+          ctx.lineWidth = s * 2;
+          ctx.strokeStyle = data.color;
+          ctx.setLineDash(dash);
+          ctx.globalAlpha = 0.8;
+          ctx.stroke();
+        }
 
-      ctx.restore();
+        if (data.show_cog) {
+          speedvector(data.COG, data.SOG);
+        }
+        if (data.show_ctw) {
+          speedvector(data.CTW, data.STW, [s * 6, s * 6]);
+        }
+        if (data.show_dft) {
+          speedvector(data.SET, data.DFT, [s * 2, s * 2]);
+        }
+      } finally {
+        ctx.restore();
+      }
     },
   };
 
@@ -333,34 +305,29 @@ export default async (api) => {
   });
 
   async function showDialog(e) {
+    const pos0 = api.getStoreData("nav.gps.position");
+    const pos = pos0 && LonLat(pos0.lon, pos0.lat);
+    const cog = api.getStoreData("nav.gps.course");
+    const sog = api.getStoreData("nav.gps.speed");
+    const magvar = api.getStoreData("nav.gps.magVariation", 0);
+    const center = api.getStoreData("map.centerPosition");
+    if (center == null) return;
     const m = await fetch(modeUrl).then((r) => r.json());
-    const obj = center; // freeze map center on dialog open
-    const boat = boatdata;
-    log(m, obj, boat);
-    const brg = round(
-      to360(boat?.pos?.initialBearingTo(obj) - (boat?.var ?? 0)),
-    );
-    const rng = round(boat?.pos?.distanceTo(obj) * nm, 2);
-    const cog = round(boat?.cog);
-    const sog = round(boat?.sog * kn, 1);
+    log(m, center, pos, cog, sog, magvar, center);
+    const brg = to360(pos?.initialBearingTo(center) - magvar);
+    const rng = pos?.distanceTo(center);
     const values = {
-      brg,
-      rng,
-      cog,
-      sog,
+      brg: round(brg),
+      rng: round(rng * nm, 2),
+      cog: round(cog),
+      sog: round(sog * kn, 1),
       update: m.mode > 1,
-      magnetic: boat?.var,
+      magnetic: !!magvar,
     };
+    log(values);
     const parameters = [];
-    const disabled = avnavVersion < 20261124 && isRotated;
-    if (obj != null && !disabled) {
-      parameters.push({
-        name: "brg",
-        displayName: values.magnetic ? "BRG" : "BRG (T)",
-        description: "bearing to object at map obj",
-        type: "FLOAT",
-        list: [0, 360],
-      });
+    const disabled = false; // avnavVersion < 20261124 && isRotated;
+    if (center != null && !disabled) {
       if (values.magnetic) {
         parameters.push({
           name: "magnetic",
@@ -369,13 +336,22 @@ export default async (api) => {
           type: "BOOLEAN",
         });
       }
-      parameters.push({
-        name: "rng",
-        displayName: "RNG (nm)",
-        description: "range to object at map obj",
-        type: "FLOAT",
-        list: [0, 100],
-      });
+      parameters.push(
+        {
+          name: "brg",
+          displayName: values.magnetic ? "BRG" : "BRG (T)",
+          description: "bearing to object at map obj",
+          type: "FLOAT",
+          list: [0, 360],
+        },
+        {
+          name: "rng",
+          displayName: "RNG (nm)",
+          description: "range to object at map obj",
+          type: "FLOAT",
+          list: [0, 100],
+        },
+      );
       if (m.mode > 1) {
         parameters.push({
           name: "update",
@@ -408,13 +384,10 @@ export default async (api) => {
     if (m.mode < 1) text += "Filter not initialized, provide a fix to start. ";
     if (m.mode == 1)
       text += "Locked to GPS, measurements will not affect the filter. ";
-    if (m.mode > 1) text += "Dead reckoning. ";
-    if (!hasOverlay)
-      text += "Add KalmanFilter map overlay to enable bearings and fixes! ";
-    if (disabled) text += "Disable map rotation for data input! ";
+    if (m.mode > 1) text += `Dead reckoning (${m.model}D). `;
 
     function time() {
-      const t = rtime ?? new Date();
+      const t = api.getStoreData("nav.gps.rtime", new Date());
       return t.toLocaleTimeString([], {
         hour: "2-digit",
         minute: "2-digit",
@@ -453,9 +426,7 @@ export default async (api) => {
             icon: `${base}icons/sat.svg`,
             shortText: "GPS off",
             toggle: !m.gps,
-            onClick: (event, vals, close) => {
-              fetch(`${modeUrl}?gps=${!m.gps}`);
-            },
+            onClick: (event, vals, close) => fetch(`${modeUrl}?gps=${!m.gps}`),
           },
           {
             name: "c_s",
@@ -463,89 +434,35 @@ export default async (api) => {
             shortText: "C/S",
             visible: m.mode == 3,
             disabled: () => !(isFinite(values.cog) && isFinite(values.sog)),
-            onClick: (event, vals, close) => {
-              if (m.mode == 3) {
-                fetch(`${inputUrl}?COG=${vals.cog}&SOG=${vals.sog / kn}`);
-              }
-            },
+            onClick: (event, vals, close) =>
+              fetch(`${inputUrl}?COG=${vals.cog}&SOG=${vals.sog / kn}`),
           },
           {
             name: "fix",
             icon: `${base}icons/gps.svg`,
             shortText: "FIX",
-            visible: m.mode != 1 && obj != null && !disabled,
+            visible: m.mode != 1,
             onClick: (event, vals, close) => {
               measurements.push({
-                lon: obj.lon,
-                lat: obj.lat,
+                lon: center.lon,
+                lat: center.lat,
                 label: time(),
               });
-              if (obj != null) {
-                fetch(`${inputUrl}?LON=${obj.lon}&LAT=${obj.lat}`);
-              }
-            },
-          },
-          {
-            name: "rng",
-            icon: `${base}icons/range.svg`,
-            shortText: "RNG",
-            visible: obj != null && !disabled,
-            disabled: () => !isFinite(values.rng) || !isFinite(values.rng),
-            onClick: (event, vals, close) => {
-              log(vals);
-              const brg = to360(vals.brg + (vals.magnetic ? boat.var : 0));
-              measurements.push({
-                lon: obj.lon,
-                lat: obj.lat,
-                rng: vals.rng / nm,
-                //  arc around BRG instead of full circle
-                a: brg + 180 - 45,
-                b: brg + 180 + 45,
-                alpha: vals.update ? 1 : 0.5,
-                label: `${vals.rng.toFixed(2)}nm ${time()}`,
-              });
-              if (vals.update) {
-                fetch(
-                  `${inputUrl}?BLON=${obj.lon}&BLAT=${obj.lat}&RNG=${vals.rng / nm}`,
-                );
-              }
-            },
-          },
-          {
-            name: "brg",
-            icon: `${base}icons/compass.svg`,
-            shortText: "BRG",
-            visible: obj != null && !disabled,
-            disabled: () => !isFinite(values.brg),
-            onClick: (event, vals, close) => {
-              log(vals);
-              const brg = to360(vals.brg + (vals.magnetic ? boat.var : 0));
-              measurements.push({
-                lon: obj.lon,
-                lat: obj.lat,
-                brg,
-                rng: 2 * (boat?.pos?.distanceTo(obj) ?? 5000),
-                alpha: vals.update ? 1 : 0.5,
-                label: `${vals.brg.toFixed(0)}°${vals.magnetic ? "M" : "T"} ${time()}`,
-              });
-              if (vals.update) {
-                fetch(`${inputUrl}?BLON=${obj.lon}&BLAT=${obj.lat}&BRG=${brg}`);
-              }
+              fetch(`${inputUrl}?LON=${center.lon}&LAT=${center.lat}`);
             },
           },
           {
             name: "brgrng",
             icon: `${base}icons/radar.svg`,
             shortText: "BRG+RNG",
-            visible: obj != null && !disabled,
             disabled: () => !isFinite(values.brg) || !isFinite(values.rng),
             onClick: (event, vals, close) => {
               log(vals);
-              const brg = to360(vals.brg + (vals.magnetic ? boat.var : 0));
+              const brg = to360(vals.brg + (vals.magnetic ? magvar : 0));
               measurements.push({
-                lon: obj.lon,
-                lat: obj.lat,
-                brg: vals.brg,
+                lon: center.lon,
+                lat: center.lat,
+                brg,
                 rng: vals.rng / nm,
                 a: brg + 180 - 5,
                 b: brg + 180 + 5,
@@ -554,7 +471,54 @@ export default async (api) => {
               });
               if (vals.update) {
                 fetch(
-                  `${inputUrl}?BLON=${obj.lon}&BLAT=${obj.lat}&BRG=${brg}&RNG=${vals.rng / nm}`,
+                  `${inputUrl}?BLON=${center.lon}&BLAT=${center.lat}&BRG=${brg}&RNG=${vals.rng / nm}`,
+                );
+              }
+            },
+          },
+          {
+            name: "rng",
+            icon: `${base}icons/range.svg`,
+            shortText: "RNG",
+            disabled: () => !isFinite(values.brg) || !isFinite(values.rng),
+            onClick: (event, vals, close) => {
+              log(vals);
+              const brg = to360(vals.brg + (vals.magnetic ? magvar : 0));
+              measurements.push({
+                lon: center.lon,
+                lat: center.lat,
+                rng: vals.rng / nm,
+                a: brg + 180 - 45,
+                b: brg + 180 + 45,
+                alpha: vals.update ? 1 : 0.5,
+                label: `${vals.rng.toFixed(2)}nm ${time()}`,
+              });
+              if (vals.update) {
+                fetch(
+                  `${inputUrl}?BLON=${center.lon}&BLAT=${center.lat}&RNG=${vals.rng / nm}`,
+                );
+              }
+            },
+          },
+          {
+            name: "brg",
+            icon: `${base}icons/compass.svg`,
+            shortText: "BRG",
+            disabled: () => !isFinite(values.brg),
+            onClick: (event, vals, close) => {
+              log(vals);
+              const brg = to360(vals.brg + (vals.magnetic ? magvar : 0));
+              measurements.push({
+                lon: center.lon,
+                lat: center.lat,
+                brg,
+                rng: 2 * (pos?.distanceTo(center) ?? 5000),
+                alpha: vals.update ? 1 : 0.5,
+                label: `${vals.brg.toFixed(0)}°${vals.magnetic ? "M" : "T"} ${time()}`,
+              });
+              if (vals.update) {
+                fetch(
+                  `${inputUrl}?BLON=${center.lon}&BLAT=${center.lat}&BRG=${brg}`,
                 );
               }
             },
