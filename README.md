@@ -61,7 +61,7 @@ The plugin publishes its estimate under `gps.kalman.*`, which you can use in AvN
 The **KF** button icon indicates the filter's current mode, and the **KF** dialog describes it:
 
 - ![OFF mode icon](icons/off.svg) **OFF**: The filter is not initialized. Provide a position fix to start it.
-- ![GPS mode icon](icons/gps.svg) **GPS**: Locked to recent GPS positions; chart observations are plotted but do not affect the estimate.
+- ![GPS mode icon](icons/gps.svg) **GPS**: Locked to recent GPS positions; chart observations do not affect the estimate unless **update filter** is enabled.
 - ![DR mode icon](icons/dr.svg) **DR**: Dead reckoning with the 6D model. Chart observations update the estimate by default.
 - ![DRM mode icon](icons/man.svg) **DRM**: Dead reckoning in manual mode with the 4D model. The dialog allows manual course and speed entry (C/S).
 
@@ -73,13 +73,13 @@ The **KF** button icon indicates the filter's current mode, and the **KF** dialo
 2. Center the charted object before opening **KF**. The chart center is captured when the dialog opens.
 3. Bearing and range fields are available in GPS-lock and dead-reckoning modes. They are prefilled with the bearing and range from AvNav’s current boat position to the chart center when that position is available. If magnetic variation is available, the dialog also offers a **magnetic** checkbox and pre-fills the bearing as magnetic; otherwise bearings are true.
 4. Choose an action:
-   - ![Fix icon](icons/gps.svg) **Fix**: Uses the chart center as the boat's observed position, for example when close to a buoy or other known object. Available before initialization and in dead-reckoning mode, but not while locked to GPS; a marker is drawn at the fix location.
-   - ![BRG icon](icons/compass.svg) **BRG**: Enter the bearing to the centered object. Select **magnetic** for a magnetic bearing; when updating the filter, the plugin converts it to true before submission. In dead-reckoning mode the bearing is used as a filter observation; successive bearings can be used for cross-bearings or running fixes.
+   - ![Fix icon](icons/gps.svg) **Fix**: Uses the chart center as the boat's observed position, for example when close to a buoy or other known object. Available before initialization, in GPS lock, and in dead-reckoning mode. With **update filter** enabled, the fix is submitted to the filter; otherwise it is only plotted.
+   - ![BRG icon](icons/compass.svg) **BRG**: Enter the bearing to the centered object. Select **magnetic** for a magnetic bearing; when **update filter** is enabled, the plugin converts it to true before submission. When enabled, the bearing is submitted as a filter observation; otherwise it is only plotted. Successive bearings can be used for cross-bearings or running fixes.
    - ![RNG icon](icons/range.svg) **RNG**: Enter the measured range and submit it. The overlay draws a range arc around the prefilled bearing (or the bearing entered in the dialog).
    - ![BRG+RNG icon](icons/radar.svg) **BRG+RNG**: Submit bearing and range together. Select **magnetic** if needed; when updating the filter, the plugin converts the bearing to true before submission. The overlay draws the bearing line and a narrow range arc.
    - ![C/S icon](icons/speed.svg) **C/S** (**4D-model**): In manual dead-reckoning mode, enter course over ground (true) and speed over ground. The button is available after initialization in that mode.
 
-In GPS lock, **BRG**, **RNG** and **BRG+RNG** only plot observations on the chart. In dead-reckoning mode they update the filter by default. The **update filter** setting is enabled by default; disable it to plot bearing/range observations on the chart without applying them to the filter.
+The **update filter** setting is enabled by default before initialization and in dead-reckoning mode, and disabled by default while locked to GPS. It is available in all modes: when enabled, Fix, BRG, RNG and BRG+RNG are submitted to the filter; when disabled, chart observations are only plotted. C/S values are also submitted only when the setting is enabled.
 
 With **Show labels** enabled, plotted markers include their entry time, and bearing/range markers also show the entered values; bearing labels are marked **M** or **T** for magnetic or true. The overlay retains up to 20 recent markers.
 

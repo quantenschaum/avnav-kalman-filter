@@ -13,6 +13,7 @@ export default async (api) => {
   const LatLon = api.LatLon();
 
   function LonLat(lon, lat) {
+    if (lon == null || lat == null) return null;
     return new LatLon(lat, lon);
   }
 
@@ -306,14 +307,14 @@ export default async (api) => {
 
   async function showDialog(e) {
     const pos0 = api.getStoreData("nav.gps.position");
-    const pos = pos0 && LonLat(pos0.lon, pos0.lat);
+    const pos = LonLat(pos0?.lon, pos0?.lat);
     const cog = api.getStoreData("nav.gps.course");
     const sog = api.getStoreData("nav.gps.speed");
     const magvar = api.getStoreData("nav.gps.magVariation", 0);
     const center = api.getStoreData("map.centerPosition");
     if (center == null) return;
     const m = await fetch(modeUrl).then((r) => r.json());
-    log(m, center, pos, cog, sog, magvar, center);
+    // log(m, center, pos, cog, sog, magvar, center);
     const brg = to360(pos?.initialBearingTo(center) - magvar);
     const rng = pos?.distanceTo(center);
     const values = {
@@ -321,13 +322,11 @@ export default async (api) => {
       rng: round(rng * nm, 2),
       cog: round(cog),
       sog: round(sog * kn, 1),
-      update: m.mode > 1,
+      update: m.mode != 1,
       magnetic: !!magvar,
     };
-    log(values);
     const parameters = [];
-    const disabled = false; // avnavVersion < 20261124 && isRotated;
-    if (center != null && !disabled) {
+    if (m.mode > 0) {
       if (values.magnetic) {
         parameters.push({
           name: "magnetic",
@@ -352,15 +351,13 @@ export default async (api) => {
           list: [0, 100],
         },
       );
-      if (m.mode > 1) {
-        parameters.push({
-          name: "update",
-          displayName: "update filter",
-          description: "update the filter, disable to only draw on the chart",
-          type: "BOOLEAN",
-        });
-      }
     }
+    parameters.push({
+      name: "update",
+      displayName: "update filter",
+      description: "update the filter, disable to only draw on the chart",
+      type: "BOOLEAN",
+    });
     if (m.mode == 3) {
       parameters.push(
         {
@@ -382,9 +379,8 @@ export default async (api) => {
 
     let text = "";
     if (m.mode < 1) text += "Filter not initialized, provide a fix to start. ";
-    if (m.mode == 1)
-      text += "Locked to GPS, measurements will not affect the filter. ";
-    if (m.mode > 1) text += `Dead reckoning (${m.model}D). `;
+    if (m.mode == 1) text += "Locked to GPS ";
+    if (m.mode > 1) text += `Dead reckoning (${m.model}D) `;
 
     function time() {
       const t = api.getStoreData("nav.gps.rtime", new Date());
@@ -434,21 +430,24 @@ export default async (api) => {
             shortText: "C/S",
             visible: m.mode == 3,
             disabled: () => !(isFinite(values.cog) && isFinite(values.sog)),
-            onClick: (event, vals, close) =>
-              fetch(`${inputUrl}?COG=${vals.cog}&SOG=${vals.sog / kn}`),
+            onClick: (event, vals, close) => {
+              fetch(`${inputUrl}?COG=${vals.cog}&SOG=${vals.sog / kn}`);
+            },
           },
           {
             name: "fix",
             icon: `${base}icons/gps.svg`,
             shortText: "FIX",
-            visible: m.mode != 1,
             onClick: (event, vals, close) => {
               measurements.push({
                 lon: center.lon,
                 lat: center.lat,
+                alpha: vals.update ? 1 : 0.5,
                 label: time(),
               });
-              fetch(`${inputUrl}?LON=${center.lon}&LAT=${center.lat}`);
+              if (vals.update) {
+                fetch(`${inputUrl}?LON=${center.lon}&LAT=${center.lat}`);
+              }
             },
           },
           {
