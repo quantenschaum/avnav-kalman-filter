@@ -260,9 +260,9 @@ export default async (api) => {
           ctx.save();
           ctx.rotate(radians(data.CTW ?? data.COG));
           ctx.beginPath();
-          ctx.moveTo(0, -s * 30);
-          ctx.lineTo(-s * 10, s * 10);
-          ctx.lineTo(s * 10, s * 10);
+          ctx.moveTo(0, -s * 20);
+          ctx.lineTo(-s * 10, s * 20);
+          ctx.lineTo(s * 10, s * 20);
           ctx.closePath();
           ctx.lineWidth = 1.5 * s;
           ctx.strokeStyle = "black";
