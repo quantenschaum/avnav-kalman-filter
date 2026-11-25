@@ -16,7 +16,7 @@ The displayed current (**SET/DFT**) is inferred from the difference between grou
 ## Install
 
 1. Upload the plugin ZIP from releases on AvNav's **Plugins** page. NumPy must be installed in AvNav's Python environment.
-2. Add the **KalmanFilter** map overlay: **Layout → Edit → On map → Add KalmanFilter**. The overlay provides the chart context for fixes, bearings and ranges.
+2. Add the **KalmanFilter** map overlay: **Layout → Edit → On map → Add KalmanFilter**. The overlay displays the estimate and plotted observations.
 
 ## Configure
 
@@ -69,9 +69,9 @@ The **KF** button icon indicates the filter's current mode, and the **KF** dialo
 
 ### Enter chart observations
 
-1. Add the **KalmanFilter** overlay. On AvNav versions older than `20261124`, disable map rotation before entering observations; newer versions support rotated maps.
+1. Add the **KalmanFilter** overlay.
 2. Center the charted object before opening **KF**. The chart center is captured when the dialog opens.
-3. When the center is usable, bearing and range fields are available in GPS-lock and dead-reckoning modes. They are prefilled with the estimated bearing and range from the boat to the chart center when a position estimate is available. If AvNav supplies magnetic variation, the dialog also offers a **magnetic** checkbox and pre-fills the bearing as magnetic; otherwise bearings are true.
+3. Bearing and range fields are available in GPS-lock and dead-reckoning modes. They are prefilled with the bearing and range from AvNav’s current boat position to the chart center when that position is available. If magnetic variation is available, the dialog also offers a **magnetic** checkbox and pre-fills the bearing as magnetic; otherwise bearings are true.
 4. Choose an action:
    - ![Fix icon](icons/gps.svg) **Fix**: Uses the chart center as the boat's observed position, for example when close to a buoy or other known object. Available before initialization and in dead-reckoning mode, but not while locked to GPS; a marker is drawn at the fix location.
    - ![BRG icon](icons/compass.svg) **BRG**: Enter the bearing to the centered object. Select **magnetic** for a magnetic bearing; when updating the filter, the plugin converts it to true before submission. In dead-reckoning mode the bearing is used as a filter observation; successive bearings can be used for cross-bearings or running fixes.
