@@ -291,7 +291,7 @@ export default async (api) => {
     color: {
       displayName: "overlay color",
       type: "COLOR",
-      default: "red",
+      default: "magenta",
       description: "covariance ellipe color",
     },
     marker: {
