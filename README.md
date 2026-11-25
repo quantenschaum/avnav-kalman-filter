@@ -45,7 +45,7 @@ The displayed current (**SET/DFT**) is inferred from the difference between grou
 
 ### NMEA output and diagnostics
 
-Normally, keep the NMEA output priority below that of your real GPS source so the estimate does not take precedence. To override GPS with the filter’s dead-reckoning output, set the plugin priority higher than the GPS source’s priority, then press **GPS off** to withhold GPS position and ground course/speed from the filter.
+Normally, keep the NMEA output priority below that of your real GPS source so the estimate does not take precedence. To override GPS with the filter’s dead-reckoning output, set the plugin priority higher than the GPS source’s priority, then press **GPS off** to withhold GPS position and ground course/speed from the filter to force the filter to provide the position to AvNav.
 
 - In dead-reckoning mode, the filter outputs an RMC sentence, including in the **4D-model**.
 - In the **6D-model**, it also outputs a VDR sentence for estimated current.
