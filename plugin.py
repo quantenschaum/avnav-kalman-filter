@@ -92,7 +92,7 @@ CONFIG = [
         "description": "speed measurement error (±kn)",
         "type": "FLOAT",
         "default": 0.1,
-        "rangeOrList": [0.01, 10],
+        "rangeOrList": [0.01, 10, 0.1],
     },
     {
         "name": CRS_ERROR,

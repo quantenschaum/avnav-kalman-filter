@@ -376,7 +376,7 @@ export default async (api) => {
         displayName: "RNG (nm)",
         description: "range to object at map obj",
         type: "FLOAT",
-        list: [0, 100],
+        list: [0, 100, 0.1],
       });
     }
     parameters.push({
@@ -399,7 +399,7 @@ export default async (api) => {
           displayName: "SOG (kn)",
           description: "speed over ground",
           type: "FLOAT",
-          list: [0, 100],
+          list: [0, 100, 0.1],
         },
       );
     }
