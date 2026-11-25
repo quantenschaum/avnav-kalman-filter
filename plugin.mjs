@@ -208,12 +208,31 @@ export default async (api) => {
         const [tx, ty] = map.lonLatToPixel(data.LON, data.LAT);
         ctx.translate(tx, ty);
 
-        // position marker
-        ctx.beginPath();
-        ctx.arc(0, 0, s * 5, 0, radians(360));
-        ctx.fillStyle = data.color;
-        ctx.globalAlpha = 0.8;
-        ctx.fill();
+        if (data.marker == "boat") {
+          ctx.save();
+          ctx.rotate(radians(data.CTW ?? data.COG));
+          ctx.beginPath();
+          ctx.moveTo(0, -s * 30);
+          ctx.lineTo(-s * 10, s * 10);
+          ctx.lineTo(s * 10, s * 10);
+          ctx.closePath();
+          ctx.lineWidth = 1.5 * s;
+          ctx.strokeStyle = "black";
+          ctx.fillStyle = data.color;
+          ctx.globalAlpha = 0.6;
+          ctx.fill();
+          ctx.stroke();
+          ctx.restore();
+        } else if (data.marker == "circle") {
+          ctx.beginPath();
+          ctx.arc(0, 0, s * 8, 0, radians(360));
+          ctx.lineWidth = 1.5 * s;
+          ctx.strokeStyle = "black";
+          ctx.fillStyle = data.color;
+          ctx.globalAlpha = 0.6;
+          ctx.fill();
+          ctx.stroke();
+        }
 
         const P = [
           [data.Pxx, data.Pxy],
@@ -273,6 +292,13 @@ export default async (api) => {
       default: "red",
       description: "covariance ellipe color",
     },
+    marker: {
+      displayName: "marker",
+      type: "SELECT",
+      default: "boat",
+      list: ["boat", "circle", "none"],
+      description: "what kind of marker to display at estimated position",
+    },
     confidence: {
       displayName: "confidence level",
       type: "FLOAT",
@@ -328,6 +354,13 @@ export default async (api) => {
     };
     const parameters = [];
     if (m.mode > 0) {
+      parameters.push({
+        name: "brg",
+        displayName: values.magnetic ? "BRG" : "BRG (T)",
+        description: "bearing to object at map obj",
+        type: "FLOAT",
+        list: [0, 360],
+      });
       if (values.magnetic) {
         parameters.push({
           name: "magnetic",
@@ -336,22 +369,13 @@ export default async (api) => {
           type: "BOOLEAN",
         });
       }
-      parameters.push(
-        {
-          name: "brg",
-          displayName: values.magnetic ? "BRG" : "BRG (T)",
-          description: "bearing to object at map obj",
-          type: "FLOAT",
-          list: [0, 360],
-        },
-        {
-          name: "rng",
-          displayName: "RNG (nm)",
-          description: "range to object at map obj",
-          type: "FLOAT",
-          list: [0, 100],
-        },
-      );
+      parameters.push({
+        name: "rng",
+        displayName: "RNG (nm)",
+        description: "range to object at map obj",
+        type: "FLOAT",
+        list: [0, 100],
+      });
     }
     parameters.push({
       name: "update",

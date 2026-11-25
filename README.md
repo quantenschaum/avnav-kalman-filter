@@ -39,6 +39,7 @@ The displayed current (**SET/DFT**) is inferred from the difference between grou
 
 - **Confidence level**: Sets the covariance ellipse confidence from 0–100%; set it to `0` to hide the ellipse.
 - **Overlay color**: Sets the color of the estimate and graphics.
+- **Marker**: Selects the symbol at the estimated position: **boat** (default), **circle**, or **none**. The boat marker points along CTW when available, otherwise COG. Choosing **none** hides only the position marker; the confidence ellipse, vectors, and observations remain controlled by their own settings.
 - **Show labels**: Toggles labels on plotted observations; on by default.
 - **COG vector**: Toggles the ground-velocity vector; off by default.
 - **CTW vector**: Toggles the water-velocity vector; off by default.
