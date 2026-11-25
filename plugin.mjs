@@ -319,7 +319,7 @@ export default async (api) => {
     const rng = pos?.distanceTo(center);
     const values = {
       brg: round(brg),
-      rng: round(rng * nm, 2),
+      rng: round(rng * nm, 3),
       cog: round(cog),
       sog: round(sog * kn, 1),
       update: m.mode != 1,
@@ -537,14 +537,13 @@ export default async (api) => {
       name: "button",
       shortText: "KF",
       longText: "Kalman-Filter",
-      icon: "off.svg",
+      icon: "icons/off.svg",
       // visible: false,
       // toggle: true,
       storeKeys: {
         // toggle: STOREKEYTOGGLE,
         // visible: STOREKEYMAP,
         mode: "nav.gps.kalman.mode",
-        model: "nav.gps.kalman.model",
       },
       updateFunction: (data) => {
         log(data);

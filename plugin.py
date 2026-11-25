@@ -197,13 +197,10 @@ class Plugin:
         if url == "mode":
             if "gps" in args:
                 self.use_gps = args["gps"][0] in ["1", "yes", "on", "true"]
-            if "log" in args:
-                self.use_log = args["log"][0] in ["1", "yes", "on", "true"]
             if "reset" in args:
                 self.reset = args["reset"][0] in ["1", "yes", "on", "true"]
             return {
                 "gps": self.use_gps,
-                "log": self.use_log,
                 "mode": self.mode,
                 "model": self.boat.n,
             }
@@ -318,7 +315,6 @@ class Plugin:
 
         self.input = {}
         self.use_gps = True
-        self.use_log = True
         self.reset = False
 
         def toGrid(lon, lat):
@@ -354,12 +350,6 @@ class Plugin:
                 for k in POS + C_S:
                     values0.pop(k, None)
                     values1.pop(k, None)
-            if not self.use_log:
-                log("[blue]LOG off")
-                for k in POS + C_S:
-                    for k in H_W:
-                        values0.pop(k, None)
-                        values1.pop(k, None)
 
             # avaliable input data = data received within last n seconds
             input = [k for k, v in values0.items() if monotonic() - v.timestamp < 15]
@@ -492,7 +482,7 @@ class Plugin:
             #     self.writeValue(sog, INPUT_FIELDS["SOG"])
 
             nmea = []
-            if mode > Mode.GPS and self.use_gps and self.use_log:
+            if mode > Mode.GPS:
                 rmc = self.rmc(self.utcnow(), lon, lat, boat.cog, boat.sog * KN)
                 log(rmc)
                 self.api.addNMEA(
