@@ -115,8 +115,8 @@ export default async (api) => {
       center: "map.centerPosition",
       fontsize: "properties.baseFontSize",
     },
-    initFunction: function (map, data) {},
-    finalizeFunction: function () {},
+    // initFunction: function (map, data) {log('init')},
+    // finalizeFunction: function () {log('finalize')},
     renderCanvas: function (canvas, data, map) {
       // log(canvas);
       // log(data);
@@ -341,8 +341,10 @@ export default async (api) => {
     const sog = api.getStoreData("nav.gps.speed");
     const magvar = api.getStoreData("nav.gps.magVariation", 0);
     const center = api.getStoreData("map.centerPosition");
+    const mode = api.getStoreData("nav.gps.kalman.mode");
+    const model = api.getStoreData("nav.gps.kalman.model");
+    const usegps = api.getStoreData("nav.gps.kalman.gps");
     if (center == null) return;
-    const m = await fetch(modeUrl).then((r) => r.json());
     // log(m, center, pos, cog, sog, magvar, center);
     const brg = to360(pos?.initialBearingTo(center) - magvar);
     const rng = pos?.distanceTo(center);
@@ -351,11 +353,11 @@ export default async (api) => {
       rng: round(rng * nm, 3),
       cog: round(cog),
       sog: round(sog * kn, 1),
-      update: m.mode != 1,
+      update: mode != 1,
       magnetic: !!magvar,
     };
     const parameters = [];
-    if (m.mode > 0) {
+    if (mode > 0) {
       parameters.push({
         name: "brg",
         displayName: values.magnetic ? "BRG" : "BRG (T)",
@@ -371,21 +373,23 @@ export default async (api) => {
           type: "BOOLEAN",
         });
       }
-      parameters.push({
-        name: "rng",
-        displayName: "RNG (nm)",
-        description: "range to object at map obj",
-        type: "FLOAT",
-        list: [0, 100, 0.1],
-      });
+      parameters.push(
+        {
+          name: "rng",
+          displayName: "RNG (nm)",
+          description: "range to object at map obj",
+          type: "FLOAT",
+          list: [0, 100, 0.1],
+        },
+        {
+          name: "update",
+          displayName: "update filter",
+          description: "update the filter, disable to only draw on the chart",
+          type: "BOOLEAN",
+        },
+      );
     }
-    parameters.push({
-      name: "update",
-      displayName: "update filter",
-      description: "update the filter, disable to only draw on the chart",
-      type: "BOOLEAN",
-    });
-    if (m.mode == 3) {
+    if (mode == 3) {
       parameters.push(
         {
           name: "cog",
@@ -405,9 +409,9 @@ export default async (api) => {
     }
 
     let text = "";
-    if (m.mode < 1) text += "Filter not initialized, provide a fix to start. ";
-    if (m.mode == 1) text += "Locked to GPS. ";
-    if (m.mode > 1) text += `Dead reckoning (${m.model}D). `;
+    if (mode < 1) text += "Filter not initialized, provide a fix to start. ";
+    if (mode == 1) text += "Locked to GPS. ";
+    if (mode > 1) text += `Dead reckoning (${model}D). `;
     if (values.magnetic)
       text += `Variation: ${magvar > 0 ? "E" : "W"} ${Math.abs(magvar).toFixed(1)}° `;
 
@@ -447,17 +451,17 @@ export default async (api) => {
             },
           },
           {
-            name: "gps",
-            icon: `${base}icons/sat.svg`,
+            name: "gps_off",
+            icon: `${base}icons/off.svg`,
             shortText: "GPS off",
-            toggle: !m.gps,
-            onClick: (event, vals, close) => fetch(`${modeUrl}?gps=${!m.gps}`),
+            toggle: !usegps,
+            onClick: (event, vals, close) => fetch(`${modeUrl}?gps=${!usegps}`),
           },
           {
             name: "c_s",
-            icon: `${base}icons/speed.svg`,
+            icon: `${base}icons/cogsog.svg`,
             shortText: "C/S",
-            visible: m.mode == 3,
+            visible: mode == 3,
             disabled: () => !(isFinite(values.cog) && isFinite(values.sog)),
             onClick: (event, vals, close) => {
               fetch(`${inputUrl}?COG=${vals.cog}&SOG=${vals.sog / kn}`);
@@ -481,7 +485,7 @@ export default async (api) => {
           },
           {
             name: "brgrng",
-            icon: `${base}icons/radar.svg`,
+            icon: `${base}icons/brgrng.svg`,
             shortText: "BRG+RNG",
             disabled: () => !isFinite(values.brg) || !isFinite(values.rng),
             onClick: (event, vals, close) => {
@@ -506,7 +510,7 @@ export default async (api) => {
           },
           {
             name: "rng",
-            icon: `${base}icons/range.svg`,
+            icon: `${base}icons/rng.svg`,
             shortText: "RNG",
             disabled: () => !isFinite(values.brg) || !isFinite(values.rng),
             onClick: (event, vals, close) => {
@@ -530,7 +534,7 @@ export default async (api) => {
           },
           {
             name: "brg",
-            icon: `${base}icons/compass.svg`,
+            icon: `${base}icons/brg.svg`,
             shortText: "BRG",
             disabled: () => !isFinite(values.brg),
             onClick: (event, vals, close) => {
@@ -549,6 +553,15 @@ export default async (api) => {
                   `${inputUrl}?BLON=${center.lon}&BLAT=${center.lat}&BRG=${brg}`,
                 );
               }
+            },
+          },
+          {
+            name: "brg2",
+            icon: `${base}icons/compass.svg`,
+            shortText: "BRG",
+            // disabled: () => !isFinite(values.brg),
+            onClick: (event, vals, close) => {
+              compass();
             },
           },
         ],
@@ -575,9 +588,23 @@ export default async (api) => {
         mode: "nav.gps.kalman.mode",
       },
       updateFunction: (data) => {
-        log(data);
+        log(data, base);
+        const name = base.split("/").filter(Boolean).at(-1) ?? "";
+        const button = document.querySelector(`.${name}-button`);
+        if (button) {
+          button.style.background =
+            data.mode == 1 ? "lightgreen" : data.mode > 1 ? "gold" : null;
+        }
+        const icon =
+          data.mode == 1
+            ? "GPS"
+            : data.mode == 2
+              ? "DR"
+              : data.mode == 3
+                ? "DRM"
+                : "OFF";
         return {
-          iconClass: "KF-" + data.mode,
+          iconClass: "KF-" + icon,
           // icon: `${data.mode.toLowerCase()}.svg`,
           // visible: !!data.visible,
         };

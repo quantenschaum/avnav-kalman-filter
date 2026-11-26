@@ -1,5 +1,6 @@
 import os
 import sys
+import traceback
 from datetime import datetime
 from enum import IntEnum
 from math import isfinite, nan
@@ -8,13 +9,20 @@ from typing import NamedTuple
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-DEV = os.getenv("DEV", "").lower() in {"1", "true", "on", "yes"}
 
 try:
     from rich import print
 except:
     pass
+
+DEV = os.getenv("DEV", "").lower() in {"1", "true", "on", "yes"}
 log = print if DEV else lambda *a: None
+
+
+def exception(e):
+    log(e, traceback.format_exc())
+    raise
+
 
 try:
     from avnav_api import AVNApi
@@ -174,6 +182,10 @@ class Entry(NamedTuple):
     source: str = SOURCE
 
 
+def slist(l):
+    return ",".join(map(str, sorted(l)))
+
+
 class Plugin:
     @classmethod
     def pluginInfo(cls):
@@ -195,7 +207,8 @@ class Plugin:
         # self.api.registerRestart(self.stop)
         self.api.registerRequestHandler(self.handleApiRequest)
         self.saveAllConfig()
-        print(self.api.getBaseUrl())
+        self.use_gps = True
+        log(self.api.getBaseUrl())
 
     def handleApiRequest(self, url, handler, args):
         log(url, args)
@@ -297,14 +310,14 @@ class Plugin:
         return f"${self.config[TALKER_ID]}VDR,{set:.2f},T,,,{dft:.3f},N"
 
     def run(self):
-        # outer loop for restarting main loop
+        sleep(1)
         while not self.api.shouldStopMainThread():
             try:
                 self.loop()
             except Exception as x:
-                log("ERROR", x)
                 self.api.error(f"{x}")
                 self.api.setStatus("ERROR", f"{x}")
+                exception(x)
                 sleep(5)
 
     def loop(self):
@@ -325,7 +338,6 @@ class Plugin:
         b0, x0, y0, scale = 0, 0, 0, 1
 
         self.input = {}
-        self.use_gps = True
         self.reset = False
 
         def toGrid(lon, lat):
@@ -462,8 +474,9 @@ class Plugin:
                 log(f"[red]updated {','.join(updated)}")
 
             data = {
-                "mode": str(mode),
+                "mode": mode,
                 "model": boat.n,
+                "gps": self.use_gps,
             }
             if mode > Mode.OFF:
                 lon, lat = toLL(*boat.pos)
@@ -539,6 +552,6 @@ class Plugin:
 
             self.api.setStatus(
                 "NMEA",
-                f"model:{boat.n}D mode:{mode} gps:{gps} input:{input} updated:{updated} NMEA:{nmea}",
+                f"model:{boat.n}D mode:{mode} gps:{slist(f'{k}:{v}' for k, v in gps.items())} input:{slist(input)} updated:{slist(updated)} NMEA:{slist(nmea)}",
             )
             sleep(max(0, self.config[INTERVAL] - (monotonic() - t1)))

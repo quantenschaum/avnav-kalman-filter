@@ -66,7 +66,7 @@ The **KF** button icon indicates the filter's current mode, and the **KF** dialo
 - ![OFF mode icon](icons/off.svg) **OFF**: The filter is not initialized. Provide a position fix to start it.
 - ![GPS mode icon](icons/gps.svg) **GPS**: Locked to recent GPS positions; chart observations do not affect the estimate unless **update filter** is enabled.
 - ![DR mode icon](icons/dr.svg) **DR**: Dead reckoning with the 6D model. Chart observations update the estimate by default.
-- ![DRM mode icon](icons/man.svg) **DRM**: Dead reckoning in manual mode with the 4D model. The dialog allows manual course and speed entry (C/S).
+- ![DRM mode icon](icons/drm.svg) **DRM**: Dead reckoning in manual mode with the 4D model. The dialog allows manual course and speed entry (C/S).
 
 **GPS off** simulates GPS loss by withholding GPS position and ground course/speed from the filter. Log and compass input, if selected, continues to be used.
 
@@ -77,10 +77,10 @@ The **KF** button icon indicates the filter's current mode, and the **KF** dialo
 3. Bearing and range fields are available in GPS-lock and dead-reckoning modes. They are prefilled with the bearing and range from AvNav’s current boat position to the chart center. If magnetic variation is available, the dialog also offers a **magnetic** checkbox and pre-fills the bearing as magnetic; otherwise bearings are true.
 4. Choose an action:
    - ![Fix icon](icons/gps.svg) **Fix**: Uses the chart center as the boat's observed position, for example when close to a buoy or other known object. Available before initialization, in GPS lock, and in dead-reckoning mode. With **update filter** enabled, the fix is submitted to the filter; otherwise it is only plotted.
-   - ![BRG icon](icons/compass.svg) **BRG**: Enter the bearing to the centered object. Select **magnetic** for a magnetic bearing; when **update filter** is enabled, the plugin converts it to true before submission. When enabled, the bearing is submitted as a filter observation; otherwise it is only plotted. Successive bearings can be used for cross-bearings or running fixes.
-   - ![RNG icon](icons/range.svg) **RNG**: Enter the measured range and submit it. The overlay draws a range arc around the prefilled bearing (or the bearing entered in the dialog).
-   - ![BRG+RNG icon](icons/radar.svg) **BRG+RNG**: Submit bearing and range together. Select **magnetic** if needed; when updating the filter, the plugin converts the bearing to true before submission. The overlay draws the bearing line and a narrow range arc.
-   - ![C/S icon](icons/speed.svg) **C/S** (**4D-model**): In manual dead-reckoning mode, enter course over ground (true) and speed over ground. The button is available after initialization; selecting it submits the values.
+   - ![BRG icon](icons/brg.svg) **BRG**: Enter the bearing to the centered object. Select **magnetic** for a magnetic bearing; when **update filter** is enabled, the plugin converts it to true before submission. When enabled, the bearing is submitted as a filter observation; otherwise it is only plotted. Successive bearings can be used for cross-bearings or running fixes.
+   - ![RNG icon](icons/rng.svg) **RNG**: Enter the measured range and submit it. The overlay draws a range arc around the prefilled bearing (or the bearing entered in the dialog).
+   - ![BRG+RNG icon](icons/brgrng.svg) **BRG+RNG**: Submit bearing and range together. Select **magnetic** if needed; when updating the filter, the plugin converts the bearing to true before submission. The overlay draws the bearing line and a narrow range arc.
+   - ![C/S icon](icons/cogsog.svg) **C/S** (**4D-model**): In manual dead-reckoning mode, enter course over ground (true) and speed over ground. The button is available after initialization; selecting it submits the values.
 
 The **update filter** setting is enabled by default before initialization and in dead-reckoning mode, and disabled by default while locked to GPS. It is available in all modes and controls whether Fix, BRG, RNG and BRG+RNG are submitted to the filter or only plotted. It does not gate the **C/S** button.
 
