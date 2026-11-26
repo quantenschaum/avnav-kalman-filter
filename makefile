@@ -1,14 +1,10 @@
 SHELL=/bin/bash
 
-# zip:
-	# make -B clean kalman-filter.zip
-
 kalman-filter.zip: kalman-filter
 	rm -f $@
 	zip -r $@ $<
 
-kalman-filter: pyproject.toml $(wildcard plugin.* *.py *.md icons/*)
-	echo $^
+kalman-filter: pyproject.toml $(wildcard plugin.* *.py *.*js *.css *.json *.svg *.md icons/*)
 	mkdir -p $@
 	cp -rv * $@ || true
 	rm -rf $@/__*
