@@ -112,7 +112,7 @@ function startCompass(onHeading, onError, timeout = 500) {
     };
     const emitHeading = () => {
       if (!stopped) {
-        const hdg = -5 + Math.random() * 10;
+        const hdg = to360(-5 + Math.random() * 10);
         log("sim", hdg);
         onHeading(hdg, stop);
       }
