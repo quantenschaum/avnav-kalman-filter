@@ -34,6 +34,79 @@ export default async (api) => {
 
   const measurements = [];
 
+  function pixelsPerMeter(context, center) {
+    const [px0, py0] = context.lonLatToPixel(center.lon, center.lat - 0.5 / 60);
+    const [px1, py1] = context.lonLatToPixel(center.lon, center.lat + 0.5 / 60);
+    return Math.hypot(px1 - px0, py1 - py0) / 1852;
+  }
+
+  function renderMeasurements(context, data, ppm) {
+    const ctx = context.getContext();
+    const scale = context.getScale();
+    const rotation = context.getRotation();
+
+    function label(text, x, y, rot = 0, dx = 0, dy = 0) {
+      if (text == null || !data.labels) return;
+      ctx.save();
+      ctx.translate(x, y);
+      if (Math.abs(to180(rot + degrees(rotation))) > 90) rot += 180; // keep upright
+      ctx.rotate(radians(rot));
+      ctx.translate(dx, dy);
+      ctx.font = `${scale * data.fontsize}px Roboto, Arial, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "bottom";
+      ctx.fillText(text, 0, 0);
+      ctx.restore();
+    }
+
+    for (const m of measurements) {
+      const [bx, by] = context.lonLatToPixel(m.lon, m.lat);
+      ctx.fillStyle = ctx.strokeStyle = m.color ?? "black";
+      ctx.lineWidth = scale * (m.width ?? 2);
+      ctx.globalAlpha = m.alpha ?? 0.9;
+      ctx.beginPath();
+      ctx.arc(bx, by, scale * 5, 0, radians(360));
+      ctx.fill();
+
+      if (m.brg == null && m.rng == null) {
+        ctx.beginPath();
+        ctx.arc(bx, by, scale * 10, 0, radians(360));
+        ctx.stroke();
+        label(m.label, bx, by, degrees(-rotation), 0, -scale * 10);
+      }
+
+      if (m.brg != null) {
+        const brg = radians(m.brg + 180);
+        const d = 1.1 * m.rng * ppm;
+        const ex = bx + d * Math.sin(brg);
+        const ey = by - d * Math.cos(brg);
+        ctx.beginPath();
+        ctx.moveTo(bx, by);
+        ctx.lineTo(ex, ey);
+        ctx.stroke();
+        const a = to180(m.brg);
+        const b = Math.sign(a) * 90;
+        label(m.label, (bx + ex) / 2, (by + ey) / 2, a - b);
+      }
+
+      if (m.rng != null && m.a != null && m.b != null) {
+        ctx.beginPath();
+        const a = m.a ?? 0;
+        const b = m.b ?? 360;
+        ctx.arc(bx, by, m.rng * ppm, radians(a - 90), radians(b - 90));
+        ctx.stroke();
+        if (m.brg == null) {
+          const a = to180(m.a + to180(m.b - m.a) / 2);
+          const b = Math.abs(a) > 90 ? 180 : 0;
+          const d = m.rng * ppm;
+          const x = bx + d * Math.sin(radians(a));
+          const y = by - d * Math.cos(radians(a));
+          label(m.label, x, y, a + b);
+        }
+      }
+    }
+  }
+
   const KalmanOverlay = {
     name: "KalmanFilter",
     type: "map",
@@ -59,97 +132,32 @@ export default async (api) => {
       center: "map.centerPosition",
       fontsize: "properties.baseFontSize",
     },
-    // initFunction: function (map, data) {log('init')},
+    // initFunction: function (context, data) {log('init')},
     // finalizeFunction: function () {log('finalize')},
-    renderCanvas: function (canvas, data, map) {
+    renderCanvas: function (canvas, data, context) {
       // log(canvas);
       // log(data);
-      // log(map);
-      // log(map.pixelToLonLat(0, 0));
-      // log(map.getDimensions());
-      // log(map.getScale());
-      // log(map.getRotation());
+      // log(context);
+      // log(context.pixelToLonLat(0, 0));
+      // log(context.getDimensions());
+      // log(context.getScale());
+      // log(context.getRotation());
       // log(api.getBaseUrl());
       // console.log(api.getStoreBaseKey());
       // console.log(api.getStoreData());
       if (data?.center == null) return;
       if (data?.LON == null || data?.LAT == null) return;
-      const s = map.getScale();
-      const r = map.getRotation();
+      const scale = context.getScale();
       const center = data.center;
-      const [px0, py0] = map.lonLatToPixel(center.lon, center.lat - 0.5 / 60);
-      const [px1, py1] = map.lonLatToPixel(center.lon, center.lat + 0.5 / 60);
-      const ppm = Math.hypot(px1 - px0, py1 - py0) / 1852;
-      // log("ppm", ppm);
-
-      const ctx = map.getContext();
+      const ppm = pixelsPerMeter(context, center);
+      const ctx = context.getContext();
       try {
         ctx.save();
 
         if (measurements.length > 20) measurements.shift();
-        function label(text, x, y, rot = 0, dx = 0, dy = 0) {
-          if (text == null || !data.labels) return;
-          ctx.save();
-          ctx.translate(x, y);
-          if (Math.abs(to180(rot + degrees(r))) > 90) rot += 180; // keep upright
-          ctx.rotate(radians(rot));
-          ctx.translate(dx, dy);
-          ctx.font = `${s * data.fontsize}px Roboto, Arial, sans-serif`;
-          ctx.textAlign = "center";
-          ctx.textBaseline = "bottom";
-          ctx.fillText(text, 0, 0);
-          ctx.restore();
-        }
-        for (const m of measurements) {
-          const [bx, by] = map.lonLatToPixel(m.lon, m.lat);
-          // marker
-          ctx.fillStyle = ctx.strokeStyle = m.color ?? "black";
-          ctx.lineWidth = s * (m.width ?? 2);
-          ctx.globalAlpha = m.alpha ?? 0.9;
-          ctx.beginPath();
-          ctx.arc(bx, by, s * 5, 0, radians(360));
-          ctx.fill();
+        renderMeasurements(context, data, ppm);
 
-          if (m.brg == null && m.rng == null) {
-            // fix marker
-            ctx.beginPath();
-            ctx.arc(bx, by, s * 10, 0, radians(360));
-            ctx.stroke();
-            label(m.label, bx, by, degrees(-r), 0, -s * 10);
-          }
-          if (m.brg != null) {
-            // bearing line
-            const brg = radians(m.brg + 180);
-            const d = 1.1 * m.rng * ppm;
-            const ex = bx + d * Math.sin(brg);
-            const ey = by - d * Math.cos(brg);
-            ctx.beginPath();
-            ctx.moveTo(bx, by);
-            ctx.lineTo(ex, ey);
-            ctx.stroke();
-            const a = to180(m.brg);
-            const b = Math.sign(a) * 90;
-            label(m.label, (bx + ex) / 2, (by + ey) / 2, a - b);
-          }
-          if (m.rng != null && m.a != null && m.b != null) {
-            // range circle
-            ctx.beginPath();
-            const a = m.a ?? 0;
-            const b = m.b ?? 360;
-            ctx.arc(bx, by, m.rng * ppm, radians(a - 90), radians(b - 90));
-            ctx.stroke();
-            if (m.brg == null) {
-              const a = to180(m.a + to180(m.b - m.a) / 2);
-              const b = Math.abs(a) > 90 ? 180 : 0;
-              const d = m.rng * ppm;
-              const x = bx + d * Math.sin(radians(a));
-              const y = by - d * Math.cos(radians(a));
-              label(m.label, x, y, a + b);
-            }
-          }
-        }
-
-        const [tx, ty] = map.lonLatToPixel(data.LON, data.LAT);
+        const [tx, ty] = context.lonLatToPixel(data.LON, data.LAT);
         ctx.translate(tx, ty);
 
         const P = [
@@ -169,7 +177,7 @@ export default async (api) => {
           ctx.globalAlpha = 0.1;
           ctx.fill();
           ctx.strokeStyle = data.color;
-          ctx.lineWidth = s * 2;
+          ctx.lineWidth = scale * 2;
           ctx.globalAlpha = 0.8;
           ctx.stroke();
         }
@@ -182,7 +190,7 @@ export default async (api) => {
           ctx.beginPath();
           ctx.moveTo(0, 0);
           ctx.lineTo(Math.sin(crs) * spd, -Math.cos(crs) * spd);
-          ctx.lineWidth = s * 2;
+          ctx.lineWidth = scale * 2;
           ctx.strokeStyle = data.color;
           ctx.setLineDash(dash);
           ctx.globalAlpha = 0.8;
@@ -194,21 +202,21 @@ export default async (api) => {
           speedvector(data.COG, data.SOG);
         }
         if (data.show_ctw) {
-          speedvector(data.CTW, data.STW, [s * 6, s * 6]);
+          speedvector(data.CTW, data.STW, [scale * 6, scale * 6]);
         }
         if (data.show_dft) {
-          speedvector(data.SET, data.DFT, [s * 2, s * 2]);
+          speedvector(data.SET, data.DFT, [scale * 2, scale * 2]);
         }
 
         if (data.marker == "boat") {
           ctx.save();
           ctx.rotate(radians(data.CTW ?? data.COG));
           ctx.beginPath();
-          ctx.moveTo(0, -s * 20);
-          ctx.lineTo(-s * 10, s * 20);
-          ctx.lineTo(s * 10, s * 20);
+          ctx.moveTo(0, -scale * 20);
+          ctx.lineTo(-scale * 10, scale * 20);
+          ctx.lineTo(scale * 10, scale * 20);
           ctx.closePath();
-          ctx.lineWidth = 1.5 * s;
+          ctx.lineWidth = 1.5 * scale;
           ctx.strokeStyle = "black";
           ctx.fillStyle = data.color;
           ctx.globalAlpha = 0.8;
@@ -217,8 +225,8 @@ export default async (api) => {
           ctx.restore();
         } else if (data.marker == "circle") {
           ctx.beginPath();
-          ctx.arc(0, 0, s * 8, 0, radians(360));
-          ctx.lineWidth = 1.5 * s;
+          ctx.arc(0, 0, scale * 8, 0, radians(360));
+          ctx.lineWidth = 1.5 * scale;
           ctx.strokeStyle = "black";
           ctx.fillStyle = data.color;
           ctx.globalAlpha = 0.8;
