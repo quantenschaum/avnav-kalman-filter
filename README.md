@@ -4,6 +4,10 @@ The Kalman Filter plugin estimates the boat's position, course and speed. It use
 
 ![AvNav](avnav.png)
 
+## Demo: 10-hour passage
+
+[Watch the 10-hour passage replay](https://freenauticalchart.net/kalman-filter.mp4). The video replays recorded data from a passage with the filter using compass heading and log speed only; GPS is shown for comparison, not used by the filter. The green track is the true GPS track, the red track is the filter's estimated position, blue ellipses show estimated position covariance, and black lines mark bearings entered once per hour. It demonstrates how the estimate develops during dead reckoning and how periodic bearings help constrain it.
+
 ## 4D-model and 6D-model
 
 Choose between them with **Use log and compass** in the plugin settings:
@@ -98,3 +102,24 @@ Calibrate the phone's compass before use. **CMP** is shown only if the device an
 
 - ![Reset icon](icons/reset.svg) **Reset** restarts the filter and clears plotted markers.
 - ![Cleanup icon](icons/eraser.svg) **Cleanup** clears observation markers from the overlay; it does not undo observations already incorporated by the filter.
+
+## How the filter combines measurements
+
+A Kalman filter keeps one evolving estimate of the boat, rather than choosing one sensor as the answer. In the **4D-model**, that estimate contains position and ground velocity. In the **6D-model**, it contains position, water velocity from the log and compass, and an estimated current. Each input provides a different clue about the same boat state.
+
+On each active update, the plugin first **predicts** where the boat should be now. It advances the previous state using the estimated velocity (and, in the 6D-model, current). The prediction also increases the state’s covariance—the filter’s representation of how uncertain it is. Motion process-noise settings control how quickly that uncertainty grows, allowing the estimate to adapt when real motion differs from the model.
+
+It then **corrects** the prediction with available observations. For each one, the filter compares the observation with what its current estimate would predict, and adjusts the shared state by an amount based on both the state covariance and the configured measurement error. A small measurement error makes an observation more influential; a large error makes the filter rely more on its existing estimate. Position covariance is also what the overlay visualizes as the confidence ellipse.
+
+A single bearing mainly reduces uncertainty **across** the line of sight: it tells the filter the direction to the reference point, but not the distance along that direction. The ellipse therefore tends to narrow across the bearing line while remaining elongated along it. Two bearings whose lines of sight cross at roughly a right angle form a **cross-bearing** and can reduce uncertainty in both directions. The bearings need not be taken at the same time: the filter predicts the boat forward between observations, carries the resulting uncertainty forward, and corrects it with each new bearing. This is a **running fix**. For the most useful next bearing, choose a reference whose line of sight is preferably perpendicular to the ellipse’s long axis, the direction in which the position is currently least certain.
+
+The plugin gathers new, valid sensor values on each loop and applies the matching updates in sequence:
+
+- **Position (GPS or Fix):** A longitude/latitude position is converted to local metre coordinates and corrects the estimated position. When enabled, GPS HDOP scales the configured position error; chart fixes use the configured error without HDOP scaling.
+- **Compass and log (6D-model):** A true heading (**HDT**) and water speed (**STW**) together correct water velocity. The filter estimates current as part of the same state, so position references can also help it distinguish ground motion from water motion.
+- **Course and speed (4D-model):** **COG/SOG** set the ground-velocity portion of the state from the manual course and speed input.
+- **Chart bearing and range:** A bearing (**BRG**) to a known charted point corrects the boat’s position using the point’s location and the configured bearing error. A range (**RNG**) to that point similarly corrects position using the configured range error. **BRG+RNG** applies both observations in sequence.
+
+These corrections are not averaged independently and combined later: each one updates the same state and covariance before the next observation is processed. Thus, when several fresh inputs are available together, their information accumulates in the estimate according to their uncertainty. Invalid or stale sensor values are skipped. Chart observations are sent to the plugin only when **update filter** is enabled; otherwise they are plotted without changing the estimate. The plugin also avoids reading its own published estimate back as an input.
+
+For a deeper explanation of Kalman filters and their use in tracking, see [Kalman and Bayesian Filters in Python](https://github.com/rlabbe/Kalman-and-Bayesian-Filters-in-Python).
