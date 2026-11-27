@@ -19,7 +19,7 @@ check-js: $(wildcard *.mjs)
 
 check-py: $(wildcard *.py)
 	python3 -m py_compile $^
-	python3 -m ruff check --select E,F --ignore E501 $^
+	python3 -m ruff check --ignore E501 $^
 	python3 -m flake8 --jobs=1 --ignore=E501,W503 $^
 	mypy --ignore-missing-imports $^
 

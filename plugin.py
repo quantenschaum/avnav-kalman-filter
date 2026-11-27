@@ -1,7 +1,7 @@
 import os
 import sys
 import traceback
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import IntEnum
 from math import isfinite, nan
 from time import monotonic, sleep
@@ -236,12 +236,12 @@ class Plugin:
         return self.config[SPEEDUP] * monotonic()
 
     def utcnow(self):
+        now = datetime.now(UTC)
         if self.config[SPEEDUP] > 1:
-            t1 = datetime.utcnow().timestamp()
             t0 = self.start.timestamp()
-            t1 = t0 + (t1 - t0) * self.config[SPEEDUP]
-            return datetime.fromtimestamp(t1)
-        return datetime.utcnow()
+            t1 = t0 + (now.timestamp() - t0) * self.config[SPEEDUP]
+            return datetime.fromtimestamp(t1, UTC)
+        return now
 
     def getConfigValue(self, name):
         defaults = self.pluginInfo()["config"]
@@ -257,7 +257,6 @@ class Plugin:
             v = self.getConfigValue(cf.get("name"))
             d.update({cf.get("name"): v})
         self.api.saveConfigValues(d)
-        return
 
     def changeConfig(self, newValues):
         self.api.saveConfigValues(newValues)
@@ -314,7 +313,8 @@ class Plugin:
         while not self.api.shouldStopMainThread():
             try:
                 self.loop()
-            except Exception as x:
+            except Exception as x:  # noqa: BLE001
+                # Report and re-raise unexpected failures at the worker boundary.
                 self.api.error(f"{x}")
                 self.api.setStatus("ERROR", f"{x}")
                 exception(x)
@@ -332,7 +332,7 @@ class Plugin:
         qv = self.config[NOISE_V] / 1000
         qw = self.config[NOISE_W] / 1000 if self.config[USE_LOG] else 0
         self.boat = boat = kalman.Boat(qv, qw)  # the actual kalman filter
-        self.start = datetime.utcnow()
+        self.start = datetime.now(UTC)
         values0 = {}  # last values
         # scale and offset for cartesian tanget plane coordinates, boat starts at [0,0] meters
         b0, x0, y0, scale = 0, 0, 0, 1

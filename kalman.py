@@ -20,12 +20,14 @@ from numpy import (
     tan,
     zeros,
 )
-from numpy.linalg import cholesky, inv, norm
+from numpy.linalg import LinAlgError, cholesky, inv, norm
 
 kn = 3600 / 1852
 
-printm = print
-printm = lambda *a: None
+
+def printm(*args):
+    pass
+
 
 R = 6378137.0
 
@@ -69,7 +71,7 @@ def cov_ellipse(
         circle = column_stack([cos(t), sin(t)])
         ellipse = nsigma * circle @ cholesky_l.T + center
         return ellipse.T
-    except Exception as x:
+    except (LinAlgError, ValueError) as x:
         print(x)
         return zeros([2, 0])
 
