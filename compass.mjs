@@ -17,7 +17,10 @@ let hasCompass = null;
 export function compassAvailable() {
   return new Promise((resolve) => {
     log("available", hasCompass);
-    if (hasCompass != null) resolve(hasCompass);
+    if (hasCompass != null) {
+      resolve(hasCompass);
+      return;
+    }
     startCompass(
       (hdg, stop) => {
         stop();
@@ -170,6 +173,7 @@ function startCompass(onHeading, onError, timeout = 500) {
   }
 
   function armReadingTimeout() {
+    if (stopped) return;
     if (readingTimer !== null) clearTimeout(readingTimer);
     readingTimer = setTimeout(() => {
       readingTimer = null;

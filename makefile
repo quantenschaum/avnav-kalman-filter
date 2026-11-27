@@ -31,7 +31,7 @@ test-py:
 	python3 -m coverage html
 
 test-js:
-	node --test test/test_*.mjs
+	node --experimental-test-coverage --test test/test_*.mjs
 
 clean:
 	rm -rf kalman-filter.zip kalman-filter __pycache__ */__pycache__ htmlcov
