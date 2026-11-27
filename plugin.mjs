@@ -19,8 +19,8 @@ export default async (api) => {
       ...a,
     );
   }
-  log("start", api, api.getAvNavVersion());
   const avnavVersion = api.getAvNavVersion();
+  log("start", api, avnavVersion);
   const LatLon = api.LatLon();
 
   function LonLat(lon, lat) {
@@ -379,7 +379,7 @@ export default async (api) => {
           {
             name: "reset",
             icon: `${base}icons/reset.svg`,
-            onClick: (event, vals, close) => {
+            onClick: () => {
               if (!window.confirm("Reset the Kalman filter?")) return;
               fetch(`${modeUrl}?reset=true`);
               measurements.length = 0;
@@ -390,7 +390,7 @@ export default async (api) => {
             icon: `${base}icons/eraser.svg`,
             shortText: "cleanup",
             visible: measurements.length > 0,
-            onClick: (event, vals, close) => {
+            onClick: () => {
               measurements.length = 0;
             },
           },
@@ -399,7 +399,7 @@ export default async (api) => {
             icon: `${base}icons/off.svg`,
             shortText: "GPS off",
             toggle: !usegps,
-            onClick: (event, vals, close) => fetch(`${modeUrl}?gps=${!usegps}`),
+            onClick: () => fetch(`${modeUrl}?gps=${!usegps}`),
           },
           {
             name: "c_s",
@@ -407,7 +407,7 @@ export default async (api) => {
             shortText: "C/S",
             visible: mode == 3,
             disabled: () => !(isFinite(values.cog) && isFinite(values.sog)),
-            onClick: (event, vals, close) => {
+            onClick: (event, vals) => {
               fetch(`${inputUrl}?COG=${vals.cog}&SOG=${vals.sog / kn}`);
             },
           },
@@ -415,7 +415,7 @@ export default async (api) => {
             name: "fix",
             icon: `${base}icons/gps.svg`,
             shortText: "FIX",
-            onClick: (event, vals, close) => {
+            onClick: (event, vals) => {
               measurements.push({
                 lon: center.lon,
                 lat: center.lat,
@@ -432,7 +432,7 @@ export default async (api) => {
             icon: `${base}icons/brgrng.svg`,
             shortText: "BRG+RNG",
             disabled: () => !isFinite(values.brg) || !isFinite(values.rng),
-            onClick: (event, vals, close) => {
+            onClick: (event, vals) => {
               log(vals);
               const brg = to360(vals.brg + (vals.magnetic ? magvar : 0));
               measurements.push({
@@ -457,7 +457,7 @@ export default async (api) => {
             icon: `${base}icons/rng.svg`,
             shortText: "RNG",
             disabled: () => !isFinite(values.brg) || !isFinite(values.rng),
-            onClick: (event, vals, close) => {
+            onClick: (event, vals) => {
               log(vals);
               const brg = to360(vals.brg + (vals.magnetic ? magvar : 0));
               measurements.push({
@@ -481,7 +481,7 @@ export default async (api) => {
             icon: `${base}icons/brg.svg`,
             shortText: "BRG",
             disabled: () => !isFinite(values.brg),
-            onClick: (event, vals, close) => {
+            onClick: (event, vals) => {
               log(vals);
               const brg = to360(vals.brg + (vals.magnetic ? magvar : 0));
               measurements.push({
@@ -504,7 +504,7 @@ export default async (api) => {
             icon: `${base}icons/compass.svg`,
             shortText: "BRG",
             // disabled: () => !isFinite(values.brg),
-            onClick: (event, vals, close) => {
+            onClick: () => {
               compass(magvar);
             },
           },
