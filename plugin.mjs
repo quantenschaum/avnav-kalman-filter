@@ -1,3 +1,14 @@
+import {
+  covEllipse,
+  degrees,
+  kn,
+  nm,
+  radians,
+  round,
+  to180,
+  to360,
+} from "./utils.mjs";
+
 export default async (api) => {
   const devmode = new URLSearchParams(window.location.search).get("dev") == 1;
   function log(...a) {
@@ -15,73 +26,6 @@ export default async (api) => {
   function LonLat(lon, lat) {
     if (lon == null || lat == null) return null;
     return new LatLon(lat, lon);
-  }
-
-  // ---------- small linear algebra helpers (plain arrays) ----------
-  // const isMat = (a) => Array.isArray(a[0]);
-  const zeros = (r, c) => Array.from({ length: r }, () => new Array(c).fill(0));
-  // const eye = (n) => zeros(n, n).map((row, i) => ((row[i] = 1), row));
-  // const diag = (v) =>
-  //   zeros(v.length, v.length).map((row, i) => ((row[i] = v[i]), row));
-  // const transpose = (A) => A[0].map((_, j) => A.map((row) => row[j]));
-  // const copy = (a) => (isMat(a) ? a.map((r) => r.slice()) : a.slice());
-  // const norm = (v) => Math.sqrt(v.reduce((s, a) => s + a * a, 0));
-  const radians = (deg) => (deg * Math.PI) / 180;
-  const degrees = (rad) => (rad * 180) / Math.PI;
-  // const topi = (a) => a - 2 * Math.PI * Math.round(a / (2 * Math.PI)); // wrap angle to [-pi, pi]
-  const to360 = (d) => (d + 360) % 360;
-  const to180 = (d) => to360(d + 180) - 180;
-  // isNaN = (x) => x == null || Number.isNaN(x);
-  // // unit conversion factors, internal units are meters and seconds
-  const nm = 1 / 1852; // m -> nm
-  const kn = 3600 / 1852; // m/s -> kn
-  // const kmh = 3600 / 1000; // m/s -> km/h
-  //
-  function round(v, n = 0) {
-    if (v == null) return NaN;
-    const f = n == 0 ? 1 : Math.pow(10, n);
-    return Math.round(v * f) / f;
-  }
-
-  /** Cholesky decomposition: returns lower-triangular L with L Lᵀ = A */
-  function cholesky(A) {
-    const n = A.length;
-    const L = zeros(n, n);
-    for (let i = 0; i < n; i++) {
-      for (let j = 0; j <= i; j++) {
-        let s = A[i][j];
-        for (let k = 0; k < j; k++) s -= L[i][k] * L[j][k];
-        if (i === j) {
-          if (s <= 0) throw new Error("Matrix is not positive definite");
-          L[i][j] = Math.sqrt(s);
-        } else {
-          L[i][j] = s / L[j][j];
-        }
-      }
-    }
-    return L;
-  }
-  /**
-   * Coordinates of a covariance ellipse.
-   * @param {number[]} center [cx, cy]
-   * @param {number[][]} cova 2x2 covariance matrix
-   * @param {number} confidence e.g. 0.5, 0.95
-   * @param {number} npoints number of points on the ellipse
-   * @returns {number[][]} [xs, ys] (same layout as ellipse.T in numpy)
-   */
-  function covEllipse(center, cova, confidence = 0.5, npoints = 100) {
-    const nsigma = Math.sqrt(-2 * Math.log(1 - confidence));
-    const L = cholesky(cova);
-    const xs = new Array(npoints);
-    const ys = new Array(npoints);
-    for (let i = 0; i < npoints; i++) {
-      const t = (2 * Math.PI * i) / (npoints - 1);
-      const s = Math.sin(t);
-      const c = Math.cos(t);
-      xs[i] = nsigma * (L[0][0] * c + L[0][1] * s) + center[0];
-      ys[i] = -nsigma * (L[1][0] * c + L[1][1] * s) + center[1];
-    }
-    return [xs, ys];
   }
 
   const base = api.getBaseUrl();
@@ -561,7 +505,7 @@ export default async (api) => {
             shortText: "BRG",
             // disabled: () => !isFinite(values.brg),
             onClick: (event, vals, close) => {
-              compass();
+              compass(magvar);
             },
           },
         ],
@@ -589,12 +533,14 @@ export default async (api) => {
       },
       updateFunction: (data) => {
         log(data, base);
-        const name = base.split("/").filter(Boolean).at(-1) ?? "";
-        const button = document.querySelector(`.${name}-button`);
-        if (button) {
-          button.style.background =
-            data.mode == 1 ? "lightgreen" : data.mode > 1 ? "gold" : null;
-        }
+        try {
+          const name = base.split("/").filter(Boolean).at(-1) ?? "";
+          const button = document.querySelector(`.${name}-button`);
+          if (button) {
+            button.style.background =
+              data.mode == 1 ? "lightgreen" : data.mode > 1 ? "gold" : null;
+          }
+        } catch (e) {}
         const icon =
           data.mode == 1
             ? "GPS"
@@ -613,4 +559,188 @@ export default async (api) => {
     },
     "navpage",
   );
+
+  function dir(a, digits = 0, magnetic = false, DEC = 0) {
+    const p = digits ? 0 : 3;
+    let mag = "";
+    if (magnetic)
+      mag = `(${to360(a - DEC)
+        .toFixed(digits)
+        .padStart(p, "0")}°M)`;
+    return `${to360(a).toFixed(digits).padStart(p, "0")}°` + mag;
+  }
+
+  function compass(DEC = 0) {
+    const container = document.querySelector("body");
+    let overlay = container.querySelector(".compass-overlay");
+    if (overlay) overlay.remove();
+    overlay = document.createElement("div");
+    overlay.className = "compass-overlay";
+
+    function update(hdg) {
+      running = true;
+      const mag = hdg - DEC;
+      let html = '<div class="rose"></div>';
+      html += `<div class="mag">${dir(mag)}M</div>`;
+      html += `<div class="dec">${DEC >= 0 ? "+" : ""}${DEC.toFixed(1)}°</div>`;
+      html += `<div class="tru">${dir(hdg)}T</div>`;
+      html += `<div class="tme">${new Date().toLocaleTimeString("de-DE")}</div>`;
+      overlay.innerHTML = html;
+      const rose = overlay.querySelector(".rose");
+      rose.style.transform = `translate(-50%, -50%) rotate(${-mag}deg)`.trim();
+    }
+
+    function remove(e) {
+      log("remove", e);
+      e.preventDefault();
+      e.stopPropagation();
+      stopCompass();
+      overlay.remove();
+    }
+
+    let running = false;
+
+    function freeze(e) {
+      log("freeze", e);
+      e.preventDefault();
+      e.stopPropagation();
+      if (running) {
+        stopCompass();
+        running = false;
+        overlay.classList.add("frozen");
+      } else {
+        startCompass(update, DEC);
+        overlay.classList.remove("frozen");
+      }
+    }
+
+    overlay.onclick = freeze;
+    overlay.ondblclick = remove;
+
+    container.append(overlay);
+    update(0);
+    startCompass(update, DEC);
+  }
+
+  function isNumber(v) {
+    return typeof v === "number" && Number.isFinite(v);
+  }
+
+  function quaternionToHeading(quaternion) {
+    const [x, y, z, w] = quaternion;
+    let sinYaw = 2 * (w * z + x * y);
+    let cosYaw = 1 - 2 * (y * y + z * z);
+    let yaw = Math.atan2(sinYaw, cosYaw);
+    return to360(360 - degrees(yaw));
+  }
+
+  let stopCompass = () => null;
+
+  function startCompass(callback, DEC = 0) {
+    stopCompass();
+    let sensor = null;
+    let handler = null;
+    let heading = null;
+    let absolute = false;
+    let fallbackTimer = null;
+
+    function stop() {
+      if (fallbackTimer) {
+        clearTimeout(fallbackTimer);
+        fallbackTimer = null;
+      }
+      if (sensor) {
+        sensor.stop();
+        sensor = null;
+      }
+      if (handler) {
+        window.removeEventListener("deviceorientation", handler, true);
+        window.removeEventListener("deviceorientationabsolute", handler, true);
+        handler = null;
+      }
+    }
+
+    stopCompass = stop;
+
+    function applyHeading(hdg) {
+      if (!isNumber(hdg)) return;
+      hdg = to360(hdg + DEC);
+      if (!isNumber(heading)) heading = hdg;
+      const delta = to180(hdg - heading);
+      const alpha = Math.max(0.2, Math.min(0.05 * Math.abs(delta), 1));
+      heading = to360(heading + alpha * delta);
+      console.log("HDG", heading);
+      callback(heading);
+    }
+
+    function startDeviceOrientation() {
+      console.log("startDeviceOrientation");
+      stop();
+      handler = (e) => {
+        console.log(e);
+        let hdg = null;
+        if (typeof e.webkitCompassHeading === "number") {
+          hdg = e.webkitCompassHeading;
+        } else if (typeof e.alpha === "number") {
+          hdg = 360 - e.alpha;
+        }
+        if (isNumber(hdg)) absolute |= e.absolute;
+        if (absolute && !e.absolute) return;
+        applyHeading(hdg);
+      };
+
+      window.addEventListener("deviceorientation", handler, true);
+      window.addEventListener("deviceorientationabsolute", handler, true);
+    }
+
+    function requestPermissionAndStartOrientation() {
+      if (
+        typeof DeviceOrientationEvent !== "undefined" &&
+        typeof DeviceOrientationEvent.requestPermission === "function"
+      ) {
+        DeviceOrientationEvent.requestPermission()
+          .then((state) => {
+            if (state === "granted") startDeviceOrientation();
+            else console.warn("Device orientation permission denied");
+          })
+          .catch((err) => console.error(err));
+      } else {
+        startDeviceOrientation();
+      }
+    }
+
+    if (typeof window.AbsoluteOrientationSensor === "function") {
+      try {
+        sensor = new window.AbsoluteOrientationSensor({ frequency: 30 });
+        console.log("compass", sensor);
+        sensor.addEventListener("error", (e) => {
+          console.error(
+            `${sensor} ${e?.error?.name || "SensorError"} ${e?.error?.message || ""}`,
+          );
+          if (heading == null) requestPermissionAndStartOrientation();
+        });
+        sensor.addEventListener("reading", () => {
+          let hdg = quaternionToHeading(sensor.quaternion);
+          applyHeading(hdg);
+        });
+        sensor.start();
+
+        // Fallback when API exists but never produces readings (common on iOS).
+        fallbackTimer = setTimeout(() => {
+          if (heading == null) {
+            if (sensor) {
+              sensor.stop();
+              sensor = null;
+            }
+            requestPermissionAndStartOrientation();
+          }
+        }, 1200);
+      } catch (x) {
+        console.error(x);
+        requestPermissionAndStartOrientation();
+      }
+    } else {
+      requestPermissionAndStartOrientation();
+    }
+  }
 };
