@@ -1,7 +1,10 @@
-import { compass } from "./compass.mjs";
-import { devmode, kn, log, nm, round, to360 } from "./utils.mjs";
+import { compass, compassAvailable } from "./compass.mjs";
+import { kn, log, nm, round, to360 } from "./utils.mjs";
 
-export async function showDialog(e, { api, measurements }) {
+export async function showDialog(
+  e,
+  { api, measurements, position, bearing, range },
+) {
   const LatLon = api.LatLon();
   function LonLat(lon, lat) {
     if (lon == null || lat == null) return null;
@@ -9,7 +12,7 @@ export async function showDialog(e, { api, measurements }) {
   }
   const base = api.getBaseUrl();
   const pos0 = api.getStoreData("nav.gps.position");
-  const pos = LonLat(pos0?.lon, pos0?.lat);
+  const pos = position ?? LonLat(pos0?.lon, pos0?.lat);
   const cog = api.getStoreData("nav.gps.course");
   const sog = api.getStoreData("nav.gps.speed");
   const magvar = api.getStoreData("nav.gps.magVariation", 0);
@@ -19,8 +22,8 @@ export async function showDialog(e, { api, measurements }) {
   const usegps = api.getStoreData("nav.gps.kalman.gps");
   if (center == null) return;
   // log(m, center, pos, cog, sog, magvar, center);
-  const brg = to360(pos?.initialBearingTo(center) - magvar);
-  const rng = pos?.distanceTo(center);
+  const brg = bearing ?? to360(pos?.initialBearingTo(center) - magvar);
+  const rng = range ?? pos?.distanceTo(center);
   const values = {
     brg: round(brg),
     rng: round(rng * nm, 3),
@@ -234,11 +237,26 @@ export async function showDialog(e, { api, measurements }) {
         {
           name: "compass",
           icon: `${base}icons/compass.svg`,
-          shortText: "BRG",
-          visible: devmode,
+          shortText: "CMP",
           // disabled: () => !isFinite(values.brg),
+          visible: await compassAvailable(),
           onClick: () => {
-            compass(magvar);
+            // showDialog(e, { api, measurements, position: pos, bearing: 123 });
+            // api.showToast("Compass bearing captured", 5000);
+            // return;
+            compass(magvar)
+              .then((hdm) =>
+                showDialog(e, {
+                  api,
+                  measurements,
+                  position: pos,
+                  bearing: hdm,
+                }),
+              )
+              .catch((e) => {
+                log(e);
+                api.showToast(`Compass: ${e}`, 5000);
+              });
           },
         },
       ],

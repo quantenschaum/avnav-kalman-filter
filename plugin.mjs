@@ -122,7 +122,7 @@ export default async (api) => {
         mode: "nav.gps.kalman.mode",
       },
       updateFunction: (data) => {
-        log(data, api.getBaseUrl());
+        log(data);
         try {
           const name = api.getBaseUrl().split("/").filter(Boolean).at(-1) ?? "";
           const button = document.querySelector(`.${name}-button`);
@@ -131,7 +131,7 @@ export default async (api) => {
               data.mode == 1 ? "lightgreen" : data.mode > 1 ? "gold" : null;
           }
         } catch (e) {}
-        const icon =
+        const mode =
           data.mode == 1
             ? "GPS"
             : data.mode == 2
@@ -139,8 +139,9 @@ export default async (api) => {
               : data.mode == 3
                 ? "DRM"
                 : "OFF";
+        // api.showToast(`KF mode: ${mode}`, 5000);
         return {
-          iconClass: "KF-" + icon,
+          iconClass: "KF-" + mode,
           // icon: `${data.mode.toLowerCase()}.svg`,
           // visible: !!data.visible,
         };

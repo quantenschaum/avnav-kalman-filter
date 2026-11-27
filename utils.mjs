@@ -1,6 +1,6 @@
 export const devmode =
   typeof window !== "undefined" &&
-  new URLSearchParams(window.location.search).get("dev") == 1;
+  new URLSearchParams(window.location.search).get("dev") > 0;
 
 export function log(...a) {
   if (!devmode) return;
@@ -26,7 +26,17 @@ export const degrees = (rad) => (rad * 180) / Math.PI;
 export const topi = (a) => a - 2 * Math.PI * Math.round(a / (2 * Math.PI)); // wrap angle to [-pi, pi]
 export const to360 = (d) => (d + 360) % 360;
 export const to180 = (d) => to360(d + 180) - 180;
+export function dir(a, digits = 0, magnetic = false, DEC = 0) {
+  const p = digits ? 0 : 3;
+  let mag = "";
+  if (magnetic)
+    mag = `(${to360(a - DEC)
+      .toFixed(digits)
+      .padStart(p, "0")}°M)`;
+  return `${to360(a).toFixed(digits).padStart(p, "0")}°` + mag;
+}
 export const isNaN = (x) => x == null || Number.isNaN(x);
+export const isNumber = (v) => typeof v === "number" && Number.isFinite(v);
 
 // unit conversion factors, internal units are meters and seconds
 export const nm = 1 / 1852; // m -> nm
@@ -78,4 +88,12 @@ export function covEllipse(center, cova, confidence = 0.5, npoints = 100) {
     ys[i] = -nsigma * (L[1][0] * c + L[1][1] * s) + center[1];
   }
   return [xs, ys];
+}
+
+export function quaternionToHeading(quaternion) {
+  const [x, y, z, w] = quaternion;
+  let sinYaw = 2 * (w * z + x * y);
+  let cosYaw = 1 - 2 * (y * y + z * z);
+  let yaw = Math.atan2(sinYaw, cosYaw);
+  return to360(360 - degrees(yaw));
 }
