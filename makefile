@@ -23,5 +23,12 @@ check-py: $(wildcard *.py)
 	python3 -m flake8 --jobs=1 --ignore=E501,W503 $^
 	mypy --ignore-missing-imports $^
 
+test: test-py
+
+test-py:
+	python3 -m coverage run --source=kalman -m unittest discover -s test -p 'test_*.py'
+	python3 -m coverage report -m
+	python3 -m coverage html
+
 clean:
 	rm -rf kalman-filter.zip kalman-filter __pycache__
