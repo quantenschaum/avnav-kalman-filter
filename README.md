@@ -81,13 +81,18 @@ The **KF** button icon indicates the filter's current mode, and the **KF** dialo
    - ![RNG icon](icons/rng.svg) **RNG**: Enter the measured range and submit it. The overlay draws a range arc around the prefilled bearing (or the bearing entered in the dialog).
    - ![BRG+RNG icon](icons/brgrng.svg) **BRG+RNG**: Submit bearing and range together. Select **magnetic** if needed; when updating the filter, the plugin converts the bearing to true before submission. The overlay draws the bearing line and a narrow range arc.
    - ![C/S icon](icons/cogsog.svg) **C/S** (**4D-model**): In manual dead-reckoning mode, enter course over ground (true) and speed over ground. The button is available after initialization; selecting it submits the values.
-   - ![CMP icon](icons/compass.svg) **CMP**: Opens a tilt-compensated compass using the phone's orientation sensors. Sight the reference object along the phone's long edge; you do not need to look at the screen. Tap anywhere on the screen to stop the compass. The bearing is entered in the **BRG** field when the dialog reopens; accept it or adjust it before choosing **BRG** or **BRG+RNG**.
-
-Calibrate the phone's compass before use. **CMP** is available only when the device and browser provide a working orientation sensor and permission is granted. Sensor access requires a secure context. AvNav is often served over HTTP on a local network, which some browsers block; in Chrome, for a trusted AvNav origin only, add the exact origin (including scheme, host, and port) at `chrome://flags/#unsafely-treat-insecure-origin-as-secure`, enable the flag, and restart the browser. This flag weakens the browser's security for that origin.
 
 The **update filter** setting is enabled by default before initialization and in dead-reckoning mode, and disabled by default while locked to GPS. It is available in all modes and controls whether Fix, BRG, RNG and BRG+RNG are submitted to the filter or only plotted. It does not gate the **C/S** button.
 
 With **Show labels** enabled, plotted markers include their entry time, and bearing/range markers also show the entered values; bearing labels are marked **M** or **T** for magnetic or true. The overlay retains up to 20 recent markers.
+
+### Phone compass (CMP)
+
+1. In the **KF** dialog, click **CMP** to open the tilt-compensated compass, which uses the phone's orientation sensors.
+2. Sight the reference object along the phone's long edge; you do not need to look at the screen. Tap anywhere on the screen to stop the compass.
+3. The bearing is entered in the **BRG** field when the dialog reopens. Accept it or adjust it, then choose **BRG** or **BRG+RNG**.
+
+Calibrate the phone's compass before use. **CMP** is shown only if the device and browser provide a valid orientation reading and permission is granted. Sensor access requires a secure context. AvNav is often served over HTTP on a local network, which some browsers block. For a trusted AvNav origin only, add its exact origin (including scheme, host, and port) to `chrome://flags/#unsafely-treat-insecure-origin-as-secure` page in Chrome, enable the flag, and restart the browser. This flag weakens browser security for that origin.
 
 ### Reset and clear markers
 
