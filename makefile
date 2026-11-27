@@ -31,4 +31,4 @@ test-py:
 	python3 -m coverage html
 
 clean:
-	rm -rf kalman-filter.zip kalman-filter __pycache__
+	rm -rf kalman-filter.zip kalman-filter __pycache__ */__pycache__ htmlcov
