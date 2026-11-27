@@ -1,4 +1,4 @@
-const devmode =
+export const devmode =
   typeof window !== "undefined" &&
   new URLSearchParams(window.location.search).get("dev") == 1;
 
