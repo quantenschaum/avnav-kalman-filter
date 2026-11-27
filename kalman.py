@@ -2,6 +2,7 @@ from numpy import (
     arctan,
     arctan2,
     array,
+    column_stack,
     cos,
     degrees,
     diag,
@@ -70,7 +71,7 @@ def cov_ellipse(
         return ellipse.T
     except Exception as x:
         print(x)
-        return [], []
+        return zeros([2, 0])
 
 
 def to360(a):
@@ -167,6 +168,7 @@ class Kalman:
         if not callable(H):
             iter = 0
 
+        e = float("inf")
         for i in range(iter + 1):
             hx = h(x)  # prediced measurement at current state
             printm(hx, "h")
@@ -289,8 +291,7 @@ class Boat(Kalman):
     ):
         course = radians(course)
         course_error = radians(course_error)
-
-        r = lambda x: x
+        r = None
 
         if speed < 1e-6 or isnan(course):  # ignore course when stationary
             if self.stw < 1e-6:
@@ -327,7 +328,10 @@ class Boat(Kalman):
                     return
                 return array([[0, 0, vy / v2, -vx / v2]])
 
-            r = lambda x: array([topi(x[0])])
+            def course_residual(x):
+                return array([topi(x[0])])
+
+            r = course_residual
 
         elif (
             self.stw < 1e-6 or reset
@@ -342,7 +346,10 @@ class Boat(Kalman):
             z = array([s * sc, s * cc])  # cartesian velocity
             J = array([[s * cc, sc], [-s * sc, cc]])  # polar -> cartesian Jacobian
             R = J @ R @ J.T  # transformed speed covariance
-            h = lambda x: x[2:4]
+
+            def h(x):
+                return x[2:4]
+
             H = array([[0, 0, 1, 0], [0, 0, 0, 1]])
 
             if reset:
@@ -369,14 +376,20 @@ class Boat(Kalman):
                 v = sqrt(v2)
                 return array([[0, 0, vy / v2, -vx / v2], [0, 0, vx / v, vy / v]])
 
-            r = lambda x: array([topi(x[0]), x[1]])
+            def polar_residual(x):
+                return array([topi(x[0]), x[1]])
+
+            r = polar_residual
 
         self.correction(z, R, H, h, r)
 
     def measure_position(self, x, y, error=5):
         z = array([x, y])  # measured position
         R = array([[error**2, 0], [0, error**2]])  # position covariance
-        h = lambda x: x[:2]
+
+        def h(x):
+            return x[:2]
+
         H = zeros([2, self.n])
         H[0, 0] = H[1, 1] = 1
         self.correction(z, R, H, h)
@@ -400,7 +413,9 @@ class Boat(Kalman):
             H[0, 1] = dx / d2
             return H
 
-        r = lambda x: array([topi(x[0])])
+        def r(x):
+            return array([topi(x[0])])
+
         self.correction(z, R, H, h, r)
 
     def measure_range(self, x, y, range, range_error=5):
@@ -439,15 +454,14 @@ class Boat(Kalman):
             x, y = s[:2]
             dax, day = ax - x, ay - y
             da2 = dax**2 + day**2
-            da = sqrt(da2)
             dbx, dby = bx - x, by - y
             db2 = dbx**2 + dby**2
-            db = sqrt(db2)
             H = zeros([1, self.n])
             H[0, 0] = dby / db2 - day / da2
             H[0, 1] = -dbx / db2 + dax / da2
             return H
 
-        r = lambda x: array([topi(x[0])])
+        def r(x):
+            return array([topi(x[0])])
 
         self.correction(z, R, H, h, r)

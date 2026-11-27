@@ -1,24 +1,38 @@
+const devmode =
+  typeof window !== "undefined" &&
+  new URLSearchParams(window.location.search).get("dev") == 1;
+
+export function log(...a) {
+  if (!devmode) return;
+  console.log(
+    "%cKF",
+    "background: red; color: black; padding: 2px 4px; border-radius: 3px;",
+    ...a,
+  );
+}
+
 // ---------- small linear algebra helpers (plain arrays) ----------
-// export const isMat = (a) => Array.isArray(a[0]);
+export const isMat = (a) => Array.isArray(a[0]);
 export const zeros = (r, c) =>
   Array.from({ length: r }, () => new Array(c).fill(0));
-// export const eye = (n) => zeros(n, n).map((row, i) => ((row[i] = 1), row));
-// export const diag = (v) =>
-//   zeros(v.length, v.length).map((row, i) => ((row[i] = v[i]), row));
-// export const transpose = (A) => A[0].map((_, j) => A.map((row) => row[j]));
-// export const copy = (a) => (isMat(a) ? a.map((r) => r.slice()) : a.slice());
-// export const norm = (v) => Math.sqrt(v.reduce((s, a) => s + a * a, 0));
+export const eye = (n) => zeros(n, n).map((row, i) => ((row[i] = 1), row));
+export const diag = (v) =>
+  zeros(v.length, v.length).map((row, i) => ((row[i] = v[i]), row));
+export const transpose = (A) => A[0].map((_, j) => A.map((row) => row[j]));
+export const copy = (a) => (isMat(a) ? a.map((r) => r.slice()) : a.slice());
+export const norm = (v) => Math.sqrt(v.reduce((s, a) => s + a * a, 0));
 export const radians = (deg) => (deg * Math.PI) / 180;
 export const degrees = (rad) => (rad * 180) / Math.PI;
-// export const topi = (a) => a - 2 * Math.PI * Math.round(a / (2 * Math.PI)); // wrap angle to [-pi, pi]
+export const topi = (a) => a - 2 * Math.PI * Math.round(a / (2 * Math.PI)); // wrap angle to [-pi, pi]
 export const to360 = (d) => (d + 360) % 360;
 export const to180 = (d) => to360(d + 180) - 180;
-// isNaN = (x) => x == null || Number.isNaN(x);
-// // unit conversion factors, internal units are meters and seconds
+export const isNaN = (x) => x == null || Number.isNaN(x);
+
+// unit conversion factors, internal units are meters and seconds
 export const nm = 1 / 1852; // m -> nm
 export const kn = 3600 / 1852; // m/s -> kn
-// export const kmh = 3600 / 1000; // m/s -> km/h
-//
+export const kmh = 3600 / 1000; // m/s -> km/h
+
 export function round(v, n = 0) {
   if (v == null) return NaN;
   const f = n == 0 ? 1 : Math.pow(10, n);

@@ -2,6 +2,7 @@ import {
   covEllipse,
   degrees,
   kn,
+  log,
   nm,
   radians,
   round,
@@ -10,17 +11,7 @@ import {
 } from "./utils.mjs";
 
 export default async (api) => {
-  const devmode = new URLSearchParams(window.location.search).get("dev") == 1;
-  function log(...a) {
-    if (!devmode) return;
-    console.log(
-      "%cKF",
-      "background: red; color: black; padding: 2px 4px; border-radius: 3px;",
-      ...a,
-    );
-  }
-  const avnavVersion = api.getAvNavVersion();
-  log("start", api, avnavVersion);
+  log("start");
   const LatLon = api.LatLon();
 
   function LonLat(lon, lat) {
@@ -29,8 +20,6 @@ export default async (api) => {
   }
 
   const base = api.getBaseUrl();
-  const modeUrl = base + "api/mode";
-  const inputUrl = base + "api/input";
 
   const measurements = [];
 
@@ -107,6 +96,87 @@ export default async (api) => {
     }
   }
 
+  function renderCovEllipse(context, data, ppm) {
+    const ctx = context.getContext();
+    const scale = context.getScale();
+    const P = [
+      [data.Pxx, data.Pxy],
+      [data.Pxy, data.Pyy],
+    ];
+    const p = [data.confidence];
+    if (p <= 0) return;
+
+    const [xs, ys] = covEllipse([0, 0], P, p / 100, 128);
+    ctx.beginPath();
+    ctx.moveTo(xs[0] * ppm, ys[0] * ppm);
+    for (let i = 1; i < xs.length; i++) {
+      ctx.lineTo(xs[i] * ppm, ys[i] * ppm);
+    }
+    ctx.closePath();
+    ctx.fillStyle = data.color;
+    ctx.globalAlpha = 0.1;
+    ctx.fill();
+    ctx.strokeStyle = data.color;
+    ctx.lineWidth = scale * 2;
+    ctx.globalAlpha = 0.8;
+    ctx.stroke();
+  }
+
+  function renderSpeedVectors(context, data, ppm) {
+    const ctx = context.getContext();
+    const scale = context.getScale();
+
+    function speedVector(crs, spd, dash = []) {
+      if (crs == null || spd == null) return;
+      crs = radians(crs);
+      spd *= data.cvt * ppm;
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(Math.sin(crs) * spd, -Math.cos(crs) * spd);
+      ctx.lineWidth = scale * 2;
+      ctx.strokeStyle = data.color;
+      ctx.setLineDash(dash);
+      ctx.globalAlpha = 0.8;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    if (data.show_cog) speedVector(data.COG, data.SOG);
+    if (data.show_ctw) speedVector(data.CTW, data.STW, [scale * 6, scale * 6]);
+    if (data.show_dft) speedVector(data.SET, data.DFT, [scale * 2, scale * 2]);
+  }
+
+  function renderMarkerIcon(context, data) {
+    const ctx = context.getContext();
+    const scale = context.getScale();
+    if (data.marker == "boat") {
+      ctx.save();
+      ctx.rotate(radians(data.CTW ?? data.COG));
+      ctx.beginPath();
+      ctx.moveTo(0, -scale * 20);
+      ctx.lineTo(-scale * 10, scale * 20);
+      ctx.lineTo(scale * 10, scale * 20);
+      ctx.closePath();
+      ctx.lineWidth = 1.5 * scale;
+      ctx.strokeStyle = "black";
+      ctx.fillStyle = data.color;
+      ctx.globalAlpha = 0.8;
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    } else if (data.marker == "circle") {
+      ctx.beginPath();
+      ctx.arc(0, 0, scale * 8, 0, radians(360));
+      ctx.lineWidth = 1.5 * scale;
+      ctx.strokeStyle = "black";
+      ctx.fillStyle = data.color;
+      ctx.globalAlpha = 0.8;
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
+
   const KalmanOverlay = {
     name: "KalmanFilter",
     type: "map",
@@ -135,19 +205,9 @@ export default async (api) => {
     // initFunction: function (context, data) {log('init')},
     // finalizeFunction: function () {log('finalize')},
     renderCanvas: function (canvas, data, context) {
-      // log(canvas);
       // log(data);
-      // log(context);
-      // log(context.pixelToLonLat(0, 0));
-      // log(context.getDimensions());
-      // log(context.getScale());
-      // log(context.getRotation());
-      // log(api.getBaseUrl());
-      // console.log(api.getStoreBaseKey());
-      // console.log(api.getStoreData());
       if (data?.center == null) return;
       if (data?.LON == null || data?.LAT == null) return;
-      const scale = context.getScale();
       const center = data.center;
       const ppm = pixelsPerMeter(context, center);
       const ctx = context.getContext();
@@ -160,79 +220,9 @@ export default async (api) => {
         const [tx, ty] = context.lonLatToPixel(data.LON, data.LAT);
         ctx.translate(tx, ty);
 
-        const P = [
-          [data.Pxx, data.Pxy],
-          [data.Pxy, data.Pyy],
-        ];
-        const p = [data.confidence];
-        if (p > 0) {
-          const [xs, ys] = covEllipse([0, 0], P, p / 100, 128);
-          ctx.beginPath();
-          ctx.moveTo(xs[0] * ppm, ys[0] * ppm);
-          for (let i = 1; i < xs.length; i++) {
-            ctx.lineTo(xs[i] * ppm, ys[i] * ppm);
-          }
-          ctx.closePath();
-          ctx.fillStyle = data.color;
-          ctx.globalAlpha = 0.1;
-          ctx.fill();
-          ctx.strokeStyle = data.color;
-          ctx.lineWidth = scale * 2;
-          ctx.globalAlpha = 0.8;
-          ctx.stroke();
-        }
-
-        function speedvector(crs, spd, dash = []) {
-          if (crs == null || spd == null) return;
-          crs = radians(crs);
-          spd *= data.cvt * ppm;
-          ctx.save();
-          ctx.beginPath();
-          ctx.moveTo(0, 0);
-          ctx.lineTo(Math.sin(crs) * spd, -Math.cos(crs) * spd);
-          ctx.lineWidth = scale * 2;
-          ctx.strokeStyle = data.color;
-          ctx.setLineDash(dash);
-          ctx.globalAlpha = 0.8;
-          ctx.stroke();
-          ctx.restore();
-        }
-
-        if (data.show_cog) {
-          speedvector(data.COG, data.SOG);
-        }
-        if (data.show_ctw) {
-          speedvector(data.CTW, data.STW, [scale * 6, scale * 6]);
-        }
-        if (data.show_dft) {
-          speedvector(data.SET, data.DFT, [scale * 2, scale * 2]);
-        }
-
-        if (data.marker == "boat") {
-          ctx.save();
-          ctx.rotate(radians(data.CTW ?? data.COG));
-          ctx.beginPath();
-          ctx.moveTo(0, -scale * 20);
-          ctx.lineTo(-scale * 10, scale * 20);
-          ctx.lineTo(scale * 10, scale * 20);
-          ctx.closePath();
-          ctx.lineWidth = 1.5 * scale;
-          ctx.strokeStyle = "black";
-          ctx.fillStyle = data.color;
-          ctx.globalAlpha = 0.8;
-          ctx.fill();
-          ctx.stroke();
-          ctx.restore();
-        } else if (data.marker == "circle") {
-          ctx.beginPath();
-          ctx.arc(0, 0, scale * 8, 0, radians(360));
-          ctx.lineWidth = 1.5 * scale;
-          ctx.strokeStyle = "black";
-          ctx.fillStyle = data.color;
-          ctx.globalAlpha = 0.8;
-          ctx.fill();
-          ctx.stroke();
-        }
+        renderCovEllipse(context, data, ppm);
+        renderSpeedVectors(context, data, ppm);
+        renderMarkerIcon(context, data);
       } finally {
         ctx.restore();
       }
@@ -375,6 +365,9 @@ export default async (api) => {
         hour12: false,
       });
     }
+
+    const modeUrl = base + "api/mode";
+    const inputUrl = base + "api/input";
 
     api.showDialog(
       {

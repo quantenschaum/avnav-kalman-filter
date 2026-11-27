@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 try:
     from rich import print
-except:
+except ImportError:
     pass
 
 DEV = os.getenv("DEV", "").lower() in {"1", "true", "on", "yes"}
@@ -21,12 +21,12 @@ log = print if DEV else lambda *a: None
 
 def exception(e):
     log(e, traceback.format_exc())
-    raise
+    raise e
 
 
 try:
     from avnav_api import AVNApi
-except:
+except ImportError:
     pass
 
 __version__ = "dev"
@@ -182,8 +182,8 @@ class Entry(NamedTuple):
     source: str = SOURCE
 
 
-def slist(l):
-    return ",".join(map(str, sorted(l)))
+def slist(items):
+    return ",".join(map(str, sorted(items)))
 
 
 class Plugin:
@@ -507,10 +507,10 @@ class Plugin:
                 w = v * KN if k in ["SOG", "STW", "DFT"] else v
                 if isinstance(w, float):
                     w = f"{w:7.3f}"
-                l = "HDT" if k == "CTW" else k
-                u = values1[l].value if l in values1 else nan
+                value_key = "HDT" if k == "CTW" else k
+                u = values1[value_key].value if value_key in values1 else nan
                 u *= KN if k in ["SOG", "STW", "DFT"] else 1
-                s = values1[l].source if l in values1 else ""
+                s = values1[value_key].source if value_key in values1 else ""
                 log(f"{k:>6}  {w:>7}  {u:7.3f} {s}")
                 self.writeValue(v, PATH_PREFIX + k)
 
