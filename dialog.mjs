@@ -148,7 +148,7 @@ export async function showDialog(
         },
         {
           name: "fix",
-          icon: `${base}icons/gps.svg`,
+          icon: `${base}icons/fix.svg`,
           shortText: "FIX",
           onClick: (event, vals) => {
             measurements.push({
